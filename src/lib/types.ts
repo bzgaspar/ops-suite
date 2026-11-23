@@ -1,4 +1,6 @@
 export type SystemKey = 'grain' | 'isp';
+/** A non-admin user's assignment: one system or both. */
+export type UserSystem = SystemKey | 'both';
 export type Role = 'admin' | 'manager' | 'staff';
 
 export interface Profile {
@@ -6,7 +8,7 @@ export interface Profile {
   username: string;
   full_name: string;
   role: Role;
-  system: SystemKey | null;
+  system: UserSystem | null;
   active: boolean;
   created_at: string;
 }

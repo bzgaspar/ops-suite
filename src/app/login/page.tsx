@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation';
 import { Lock, LogIn } from 'lucide-react';
 import { notify } from '@/lib/notify';
 import { clearLoadCache } from '@/lib/hooks';
+import { homeFor } from '@/lib/access';
 import { supabaseBrowser } from '@/lib/supabase/client';
 import { usernameToEmail } from '@/lib/format';
 import { Button, Input } from '@/components/ui';
@@ -34,7 +35,7 @@ export default function LoginPage() {
       }
       clearLoadCache();
       ok = true;
-      router.replace(profile.role === 'admin' ? '/admin' : `/${profile.system}`);
+      router.replace(homeFor(profile));
       router.refresh();
     } catch (err) {
       notify.error(err, 'Could not sign in. Please try again.');

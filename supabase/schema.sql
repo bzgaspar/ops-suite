@@ -7,8 +7,9 @@
 -- Isolation model
 --   * Every user has a row in public.profiles with a role and a system.
 --   * role = 'admin'   → sees and manages BOTH systems and all users.
---   * role = 'manager' → full access to ONE system (incl. employees & payroll).
---   * role = 'staff'   → day-to-day records in ONE system (no payroll, no deletes).
+--   * role = 'manager' → full access to their system(s) (incl. employees & payroll).
+--   * role = 'staff'   → day-to-day records in their system(s) (no payroll, no deletes).
+--   * system = 'grain', 'isp', or 'both' (same role in both systems, still not admin).
 --   * Row Level Security on every table enforces this in the database itself,
 --     so a grain user cannot read ISP data even by calling the API directly.
 --   * There is no public sign-up. Only the admin creates users
@@ -26,7 +27,7 @@ create table if not exists public.profiles (
   username    text unique not null,
   full_name   text not null,
   role        text not null check (role in ('admin','manager','staff')),
-  system      text check (system in ('grain','isp')),
+  system      text,
   active      boolean not null default true,
   created_at  timestamptz not null default now(),
   constraint profiles_system_required check (role = 'admin' or system is not null)
@@ -42,7 +43,7 @@ create or replace function public.has_system(sys text)
 returns boolean language sql stable security definer set search_path = public as $$
   select exists (
     select 1 from profiles
-    where id = auth.uid() and active and (role = 'admin' or system = sys)
+    where id = auth.uid() and active and (role = 'admin' or system = sys or system = 'both')
   );
 $$;
 
@@ -52,9 +53,13 @@ returns boolean language sql stable security definer set search_path = public as
   select exists (
     select 1 from profiles
     where id = auth.uid() and active
-      and (role = 'admin' or (system = sys and role = 'manager'))
+      and (role = 'admin' or (system in (sys, 'both') and role = 'manager'))
   );
 $$;
+
+-- system may be 'grain', 'isp' or 'both' (upgrades the original two-value check)
+alter table public.profiles drop constraint if exists profiles_system_check;
+alter table public.profiles add constraint profiles_system_check check (system in ('grain','isp','both'));
 
 alter table public.profiles enable row level security;
 drop policy if exists profiles_select on public.profiles;

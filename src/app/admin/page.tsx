@@ -5,7 +5,8 @@ import { supabaseBrowser } from '@/lib/supabase/client';
 import { useLoad, must } from '@/lib/hooks';
 import { money, kg, n, sum, monthStart, monthEnd } from '@/lib/format';
 import { Card, PageHeader, Spinner } from '@/components/ui';
-import type { Profile } from '@/lib/types';
+import type { Profile, SystemKey } from '@/lib/types';
+import { canUseSystem } from '@/lib/access';
 
 export default function AdminOverview() {
   const { data, loading } = useLoad(async () => {
@@ -26,7 +27,7 @@ export default function AdminOverview() {
 
   if (loading || !data) return <Spinner />;
   const users = data.profiles;
-  const count = (s: string) => users.filter((u) => u.system === s && u.active).length;
+  const count = (s: SystemKey) => users.filter((u) => u.active && u.role !== 'admin' && canUseSystem(u, s)).length;
 
   return (
     <div>

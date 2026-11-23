@@ -1,7 +1,7 @@
 import 'server-only';
 import { NextResponse } from 'next/server';
 import { getProfile } from './auth';
-import type { Profile, Role, SystemKey } from './types';
+import type { Profile, Role, UserSystem } from './types';
 
 export async function requireAdminApi(): Promise<Profile | NextResponse> {
   const me = await getProfile();
@@ -12,10 +12,10 @@ export async function requireAdminApi(): Promise<Profile | NextResponse> {
   return me;
 }
 
-export function validateRoleSystem(role: unknown, system: unknown): { role: Role; system: SystemKey | null } | string {
+export function validateRoleSystem(role: unknown, system: unknown): { role: Role; system: UserSystem | null } | string {
   if (role !== 'admin' && role !== 'manager' && role !== 'staff') return 'Invalid role';
   if (role === 'admin') return { role, system: null };
-  if (system !== 'grain' && system !== 'isp') return 'Choose a system for this user';
+  if (system !== 'grain' && system !== 'isp' && system !== 'both') return 'Choose a system for this user';
   return { role, system };
 }
 

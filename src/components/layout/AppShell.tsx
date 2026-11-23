@@ -7,6 +7,7 @@ import { supabaseBrowser } from '@/lib/supabase/client';
 import { clearLoadCache } from '@/lib/hooks';
 import type { Profile } from '@/lib/types';
 import { AREAS, NAV, canSee, type Area } from './nav';
+import { systemsOf } from '@/lib/access';
 
 const ProfileCtx = createContext<Profile | null>(null);
 export const useProfile = () => useContext(ProfileCtx)!;
@@ -20,6 +21,9 @@ export default function AppShell({ area, profile, children }: { area: Area; prof
   const AreaIcon = meta.icon;
   const items = NAV[area].filter((i) => canSee(i, profile.role));
   const isAdmin = profile.role === 'admin';
+  // Admin can switch to every area; a 'both' user switches between grain and ISP.
+  const switchable: Area[] = isAdmin ? (Object.keys(AREAS) as Area[]) : systemsOf(profile);
+  const canSwitch = switchable.length > 1;
 
   const logout = async () => {
     await supabaseBrowser().auth.signOut();
@@ -38,23 +42,23 @@ export default function AppShell({ area, profile, children }: { area: Area; prof
         <aside className={`fixed inset-y-0 left-0 z-50 w-64 flex flex-col bg-slate-900 transition-transform lg:relative lg:translate-x-0 ${open ? 'translate-x-0' : '-translate-x-full'}`}>
           <div className="relative h-16 px-4 flex items-center justify-between border-b border-slate-800 flex-shrink-0">
             <button
-              className={`flex items-center gap-2 min-w-0 text-left ${isAdmin ? 'cursor-pointer' : 'cursor-default'}`}
-              onClick={() => isAdmin && setSwitcher((s) => !s)}
+              className={`flex items-center gap-2 min-w-0 text-left ${canSwitch ? 'cursor-pointer' : 'cursor-default'}`}
+              onClick={() => canSwitch && setSwitcher((s) => !s)}
             >
               <div className={`w-8 h-8 ${meta.color} rounded-lg flex items-center justify-center flex-shrink-0`}>
                 <AreaIcon size={18} className="text-white" />
               </div>
               <div className="min-w-0">
                 <p className="text-white font-semibold text-sm truncate">{meta.name}</p>
-                <p className="text-slate-400 text-[11px]">OpsSuite{isAdmin ? ' · switch system' : ''}</p>
+                <p className="text-slate-400 text-[11px]">OpsSuite{canSwitch ? ' · switch system' : ''}</p>
               </div>
-              {isAdmin && <ChevronDown size={14} className="text-slate-400" />}
+              {canSwitch && <ChevronDown size={14} className="text-slate-400" />}
             </button>
             <button className="lg:hidden p-2 text-slate-400" onClick={() => setOpen(false)} aria-label="Close menu"><X size={18} /></button>
 
-            {isAdmin && switcher && (
+            {canSwitch && switcher && (
               <div className="absolute left-3 right-3 top-14 z-10 bg-slate-800 rounded-lg shadow-xl border border-slate-700 py-1">
-                {(Object.keys(AREAS) as Area[]).map((a) => {
+                {switchable.map((a) => {
                   const A = AREAS[a];
                   const Icon = A.icon;
                   return (

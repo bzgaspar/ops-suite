@@ -64,6 +64,8 @@ Add the same three env vars in Vercel → Project → Settings → Environment V
 | **manager** | Everything in *their* system, including personnel, payroll, reports and deletes. |
 | **staff** | Day-to-day records in *their* system: buying/selling, customers, billing, collections, expenses. No payroll, personnel or reports, and no deletes. |
 
+A manager or staff user is assigned to **one system or both**. A *both* user has the same role in each system and switches between them from the top of the sidebar, but cannot manage users or open the Admin Console.
+
 Users sign in with a **username** (no e-mail needed). Internally the username maps to `username@users.ops-suite.local` in Supabase Auth.
 
 ---

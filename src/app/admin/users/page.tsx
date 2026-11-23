@@ -6,9 +6,9 @@ import { useLoad } from '@/lib/hooks';
 import { fmtDate } from '@/lib/format';
 import { Badge, Button, Card, Input, Modal, PageHeader, SearchBox, Select, Spinner, Table, td, th, ask } from '@/components/ui';
 import { useProfile } from '@/components/layout/AppShell';
-import type { Profile, Role, SystemKey } from '@/lib/types';
+import type { Profile, Role, UserSystem } from '@/lib/types';
+import { SYSTEM_LABEL, canUseSystem } from '@/lib/access';
 
-const SYSTEM_LABEL: Record<string, string> = { grain: 'Palay & Corn', isp: 'Internet Billing' };
 
 async function api(path: string, method: string, body?: unknown) {
   const res = await fetch(path, { method, headers: { 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined });
@@ -17,7 +17,8 @@ async function api(path: string, method: string, body?: unknown) {
   return json;
 }
 
-interface Form { id?: string; username: string; full_name: string; password: string; role: Role; system: SystemKey | '' }
+interface Form { id?: string; username: string; full_name: string; password: string; role: Role; system: UserSystem | '' }
+const sysOf = (f: Form) => (f.role === 'admin' ? null : f.system || 'grain');
 const blank: Form = { username: '', full_name: '', password: '', role: 'staff', system: 'grain' };
 
 export default function UsersPage() {
@@ -29,7 +30,7 @@ export default function UsersPage() {
   const [saving, setSaving] = useState(false);
 
   const list = (users ?? []).filter((u) =>
-    (filter === 'all' || (filter === 'admin' ? u.role === 'admin' : u.system === filter)) &&
+    (filter === 'all' || (filter === 'admin' ? u.role === 'admin' : u.role !== 'admin' && canUseSystem(u, filter))) &&
     `${u.full_name} ${u.username}`.toLowerCase().includes(q.toLowerCase()));
 
   const save = async () => {
@@ -38,11 +39,11 @@ export default function UsersPage() {
     try {
       if (form.id) {
         await api(`/api/admin/users/${form.id}`, 'PATCH', {
-          full_name: form.full_name, role: form.role, system: form.system || null, password: form.password || undefined,
+          full_name: form.full_name, role: form.role, system: sysOf(form), password: form.password || undefined,
         });
         notify.success('User updated');
       } else {
-        await api('/api/admin/users', 'POST', { ...form, system: form.system || null });
+        await api('/api/admin/users', 'POST', { ...form, system: sysOf(form) });
         notify.success('User created');
       }
       setForm(null);
@@ -96,7 +97,7 @@ export default function UsersPage() {
                 <tr key={u.id} className="hover:bg-slate-50">
                   <td className={`${td} font-medium`}>{u.full_name}{u.id === me.id && <span className="text-xs text-slate-400"> (you)</span>}</td>
                   <td className={td}>{u.username}</td>
-                  <td className={td}>{u.role === 'admin' ? <Badge tone="violet">all systems</Badge> : <Badge tone={u.system === 'grain' ? 'green' : 'blue'}>{SYSTEM_LABEL[u.system!]}</Badge>}</td>
+                  <td className={td}>{u.role === 'admin' ? <Badge tone="violet">all systems</Badge> : <Badge tone={u.system === 'grain' ? 'green' : u.system === 'both' ? 'amber' : 'blue'}>{SYSTEM_LABEL[u.system ?? 'grain']}</Badge>}</td>
                   <td className={td}><Badge tone={u.role === 'admin' ? 'red' : u.role === 'manager' ? 'amber' : 'slate'}>{u.role}</Badge></td>
                   <td className={td}>{u.active ? <Badge tone="green">active</Badge> : <Badge tone="red">disabled</Badge>}</td>
                   <td className={td}>{fmtDate(u.created_at)}</td>
@@ -129,9 +130,11 @@ export default function UsersPage() {
               <option value="admin">Admin (all systems + users)</option>
             </Select>
             {form.role !== 'admin' && (
-              <Select label="System" value={form.system} onChange={(e) => setForm({ ...form, system: e.target.value as SystemKey })}>
+              <Select label="System" value={form.system || 'grain'} onChange={(e) => setForm({ ...form, system: e.target.value as UserSystem })}
+                hint={form.system === 'both' ? `Works in both systems as ${form.role} (no access to users or the Admin Console). Switch systems from the top of the sidebar.` : undefined}>
                 <option value="grain">Palay & Corn Buying Station</option>
                 <option value="isp">Internet Billing & Collection</option>
+                <option value="both">Both systems</option>
               </Select>
             )}
             <div className="flex justify-end gap-2 pt-2">
