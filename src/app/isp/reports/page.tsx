@@ -33,7 +33,7 @@ export default function IspReports() {
       customers, invoices: invoices as Invoice[], payments: payments as Payment[], expenses: expenses as Expense[],
       open: (openInv as Invoice[]).filter((i) => n(i.total) - n(i.amount_paid) > 0.005), payroll: lines as { gross_pay: number; net_pay: number }[],
     };
-  }, [from, to]);
+  }, [from, to], 'isp:reports');
 
   if (me.role === 'staff') return <Card className="p-8 text-center text-slate-500">Reports are for managers only.</Card>;
 

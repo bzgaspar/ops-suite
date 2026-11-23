@@ -18,7 +18,7 @@ export default function InventoryPage() {
       db.from('grain_stock_adjustments').select('*, grain_commodities(name)').order('adj_date', { ascending: false }).limit(100).then(must),
     ]);
     return { inv: inv as InventoryRow[], adj: adj as StockAdjustment[] };
-  });
+  }, [], 'grain:inventory');
   const [form, setForm] = useState<{ adj_date: string; commodity_id: string; direction: '-' | '+'; kg: string; reason: string } | null>(null);
 
   const save = async () => {

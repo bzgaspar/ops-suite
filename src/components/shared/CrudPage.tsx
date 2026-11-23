@@ -46,7 +46,7 @@ export default function CrudPage<T extends { id: string }>(p: Props<T>) {
   const canDelete = me.role !== 'staff';
   const db = supabaseBrowser();
   const { data, loading, reload } = useLoad(async () =>
-    must(await db.from(p.table).select(p.select ?? '*').order(p.orderBy ?? 'created_at', { ascending: p.orderBy ? true : false })) as unknown as T[], [p.table]);
+    must(await db.from(p.table).select(p.select ?? '*').order(p.orderBy ?? 'created_at', { ascending: p.orderBy ? true : false })) as unknown as T[], [p.table], `crud:${p.table}:${p.select ?? '*'}`);
   const [q, setQ] = useState('');
   const [editing, setEditing] = useState<Record<string, unknown> | null>(null);
   const [saving, setSaving] = useState(false);

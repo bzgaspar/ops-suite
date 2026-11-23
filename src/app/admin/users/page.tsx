@@ -22,7 +22,7 @@ const blank: Form = { username: '', full_name: '', password: '', role: 'staff', 
 
 export default function UsersPage() {
   const me = useProfile();
-  const { data: users, loading, reload } = useLoad<Profile[]>(() => api('/api/admin/users', 'GET'));
+  const { data: users, loading, reload } = useLoad<Profile[]>(() => api('/api/admin/users', 'GET'), [], 'admin:users');
   const [q, setQ] = useState('');
   const [filter, setFilter] = useState<'all' | 'grain' | 'isp' | 'admin'>('all');
   const [form, setForm] = useState<Form | null>(null);

@@ -28,7 +28,7 @@ export default function ExpensesPage({ system }: { system: SystemKey }) {
   const categories = EXPENSE_CATEGORIES[system];
 
   const { data, loading, reload } = useLoad(async () =>
-    must(await db.from(table).select('*').gte('expense_date', from).lte('expense_date', to).order('expense_date', { ascending: false })) as Expense[], [from, to]);
+    must(await db.from(table).select('*').gte('expense_date', from).lte('expense_date', to).order('expense_date', { ascending: false })) as Expense[], [from, to], `expenses:${table}`);
 
   const rows = (data ?? []).filter((r) => !cat || r.category === cat);
   const byCat = useMemo(() => {

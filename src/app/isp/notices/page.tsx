@@ -18,11 +18,11 @@ const SEL = '*, isp_customers(full_name, account_no, address, area, phone)';
 export default function NoticesPage() {
   const me = useProfile();
   const db = supabaseBrowser();
-  const { data: customers } = useLoad(loadCustomers);
+  const { data: customers } = useLoad(loadCustomers, [], 'isp:customers');
   const [from, setFrom] = useState(format(addDays(new Date(), -30), 'yyyy-MM-dd'));
   const [to, setTo] = useState(format(new Date(), 'yyyy-MM-dd'));
   const { data: history, loading, reload } = useLoad(async () =>
-    must(await db.from('isp_notices').select(SEL).gte('issued_on', from).lte('issued_on', to).order('created_at', { ascending: false })) as Notice[], [from, to]);
+    must(await db.from('isp_notices').select(SEL).gte('issued_on', from).lte('issued_on', to).order('created_at', { ascending: false })) as Notice[], [from, to], 'isp:notices');
 
   const [type, setType] = useState<NoticeType>('reminder');
   const [target, setTarget] = useState<Target>('balance');

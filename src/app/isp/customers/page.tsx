@@ -11,7 +11,7 @@ import PaymentModal from '@/components/isp/PaymentModal';
 
 export default function CustomersPage() {
   const router = useRouter();
-  const { data, loading, reload } = useLoad(loadCustomers);
+  const { data, loading, reload } = useLoad(loadCustomers, [], 'isp:customers');
   const [q, setQ] = useState('');
   const [status, setStatus] = useState('');
   const [area, setArea] = useState('');

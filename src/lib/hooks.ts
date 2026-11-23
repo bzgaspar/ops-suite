@@ -2,17 +2,32 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import toast from 'react-hot-toast';
 
-/** Load data on mount (and when deps change). Returns data + a reload function. */
-export function useLoad<T>(fn: () => Promise<T>, deps: unknown[] = []) {
-  const [data, setData] = useState<T | null>(null);
-  const [loading, setLoading] = useState(true);
+// In-memory cache for useLoad (per browser tab). Cleared on sign-out.
+const cache = new Map<string, unknown>();
+export const clearLoadCache = () => cache.clear();
+
+/**
+ * Load data on mount (and when deps change). Returns data + a reload function.
+ * Pass a `key` to cache results: revisiting a page shows the last data instantly
+ * and refreshes it in the background (no spinner).
+ */
+export function useLoad<T>(fn: () => Promise<T>, deps: unknown[] = [], key?: string) {
+  const cacheKey = key ? `${key}|${JSON.stringify(deps)}` : null;
+  const cached = cacheKey && cache.has(cacheKey) ? (cache.get(cacheKey) as T) : null;
+  const [data, setData] = useState<T | null>(cached);
+  const [loading, setLoading] = useState(cached === null);
   const fnRef = useRef(fn);
   fnRef.current = fn;
+  const keyRef = useRef(cacheKey);
+  keyRef.current = cacheKey;
 
-  const reload = useCallback(async () => {
-    setLoading(true);
+  const reload = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true);
+    const k = keyRef.current;
     try {
-      setData(await fnRef.current());
+      const result = await fnRef.current();
+      if (k) cache.set(k, result);
+      if (k === keyRef.current) setData(result); // ignore responses for stale deps
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Failed to load');
     } finally {
@@ -20,10 +35,15 @@ export function useLoad<T>(fn: () => Promise<T>, deps: unknown[] = []) {
     }
   }, []);
 
+  useEffect(() => {
+    const hit = keyRef.current && cache.has(keyRef.current);
+    if (hit) setData(cache.get(keyRef.current!) as T);
+    reload(!!hit);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { reload(); }, deps);
+  }, deps);
 
-  return { data, loading, reload, setData };
+  const reloadLoud = useCallback(() => reload(), [reload]);
+  return { data, loading, reload: reloadLoud, setData };
 }
 
 /** Throw Supabase errors so callers can use try/catch + toast. */

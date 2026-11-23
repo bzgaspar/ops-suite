@@ -12,7 +12,7 @@ export function useGrainLookups() {
       db.from('grain_buyers').select('*').order('name').then(must),
     ]);
     return { commodities: commodities as Commodity[], farmers: farmers as Farmer[], buyers: buyers as Buyer[] };
-  });
+  }, [], 'grain:lookups');
 }
 
 /** Weight lost when drying grain from `moisture`% down to the 14% standard. */

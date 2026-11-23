@@ -31,7 +31,7 @@ export default function GrainReports() {
       purchases: purchases as Purchase[], sales: sales as Sale[], collections: saleCollections as { amount: number }[],
       expenses: expenses as Expense[], inv: inv as InventoryRow[], payroll: lines as { gross_pay: number; net_pay: number }[],
     };
-  }, [from, to]);
+  }, [from, to], 'grain:reports');
 
   if (me.role === 'staff') return <Card className="p-8 text-center text-slate-500">Reports are for managers only.</Card>;
 

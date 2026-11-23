@@ -40,8 +40,8 @@ export default function PayrollPage({ system }: { system: SystemKey }) {
     const totals = new Map<string, number>();
     (ls as { period_id: string; net_pay: number }[]).forEach((l) => totals.set(l.period_id, (totals.get(l.period_id) ?? 0) + n(l.net_pay)));
     return (ps as PayrollPeriod[]).map((p) => ({ ...p, total: totals.get(p.id) ?? 0 }));
-  });
-  const { data: employees } = useLoad(async () => must(await db.from(T.emps).select('*').order('full_name')) as Employee[]);
+  }, [], `payroll:${system}`);
+  const { data: employees } = useLoad(async () => must(await db.from(T.emps).select('*').order('full_name')) as Employee[], [], `employees:${system}`);
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [lines, setLines] = useState<Line[]>([]);

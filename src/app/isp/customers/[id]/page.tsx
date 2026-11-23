@@ -22,7 +22,7 @@ export default function CustomerDetail({ params }: { params: Promise<{ id: strin
   const me = useProfile();
   const router = useRouter();
   const db = supabaseBrowser();
-  const { data: customers, reload: reloadCustomers } = useLoad(loadCustomers);
+  const { data: customers, reload: reloadCustomers } = useLoad(loadCustomers, [], 'isp:customers');
   const { data: ledger, reload: reloadLedger } = useLoad(async () => {
     const [inv, pay, notices] = await Promise.all([
       db.from('isp_invoices').select('*').eq('customer_id', id).order('due_date').then(must),
@@ -30,7 +30,7 @@ export default function CustomerDetail({ params }: { params: Promise<{ id: strin
       db.from('isp_notices').select('*, isp_customers(full_name, account_no, address, area)').eq('customer_id', id).order('issued_on', { ascending: false }).then(must),
     ]);
     return { invoices: inv as Invoice[], payments: pay as Payment[], notices: notices as Notice[] };
-  }, [id]);
+  }, [id], 'isp:ledger');
 
   const [editing, setEditing] = useState(false);
   const [paying, setPaying] = useState(false);

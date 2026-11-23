@@ -21,7 +21,7 @@ export default function IspDashboard() {
       db.from('isp_expenses').select('expense_date, amount').gte('expense_date', months[0].start).then(must),
     ]);
     return { customers, invoices: invoices as Pick<Invoice, 'due_date' | 'total'>[], payments: payments as unknown as Payment[], expenses: expenses as { expense_date: string; amount: number }[] };
-  });
+  }, [], 'isp:dashboard');
 
   if (loading || !data) return <Spinner />;
   const t = today(), ms = monthStart();

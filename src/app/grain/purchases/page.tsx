@@ -29,7 +29,7 @@ export default function PurchasesPage() {
 
   const { data, loading, reload } = useLoad(async () =>
     must(await db.from('grain_purchases').select('*, grain_commodities(name)').gte('purchase_date', from).lte('purchase_date', to)
-      .order('purchase_date', { ascending: false }).order('created_at', { ascending: false })) as Purchase[], [from, to]);
+      .order('purchase_date', { ascending: false }).order('created_at', { ascending: false })) as Purchase[], [from, to], 'grain:purchases');
 
   const rows = useMemo(() => (data ?? []).filter((r) => `${r.ref_no} ${r.seller_name} ${r.grain_commodities?.name}`.toLowerCase().includes(q.toLowerCase())), [data, q]);
 

@@ -4,6 +4,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useState, createContext, useContext } from 'react';
 import { LogOut, Menu, X, ChevronDown } from 'lucide-react';
 import { supabaseBrowser } from '@/lib/supabase/client';
+import { clearLoadCache } from '@/lib/hooks';
 import type { Profile } from '@/lib/types';
 import { AREAS, NAV, canSee, type Area } from './nav';
 
@@ -22,6 +23,7 @@ export default function AppShell({ area, profile, children }: { area: Area; prof
 
   const logout = async () => {
     await supabaseBrowser().auth.signOut();
+    clearLoadCache();
     router.replace('/login');
     router.refresh();
   };

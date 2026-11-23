@@ -22,7 +22,7 @@ export default function AdminOverview() {
       db.from('isp_customer_balances').select('balance').then(must),
     ]);
     return { profiles: profiles as Profile[], purchases, sales, inv, customers, invoices, payments, balances };
-  });
+  }, [], 'admin:overview');
 
   if (loading || !data) return <Spinner />;
   const users = data.profiles;

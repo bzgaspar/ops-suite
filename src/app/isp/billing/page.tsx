@@ -29,8 +29,8 @@ export default function BillingPage() {
       db.from('isp_invoices').select('*, isp_customers(full_name, account_no, area)').neq('kind', 'monthly').gte('due_date', month).lt('due_date', monthEnd).then(must),
     ]);
     return ([...(monthly as Invoice[]), ...(others as Invoice[])]).sort((a, b) => (a.isp_customers?.full_name ?? '').localeCompare(b.isp_customers?.full_name ?? ''));
-  }, [month]);
-  const { data: activeCount } = useLoad(async () => (await db.from('isp_customers').select('id', { count: 'exact', head: true }).eq('status', 'active')).count ?? 0);
+  }, [month], 'isp:billing');
+  const { data: activeCount } = useLoad(async () => (await db.from('isp_customers').select('id', { count: 'exact', head: true }).eq('status', 'active')).count ?? 0, [], 'isp:active-count');
 
   const rows = useMemo(() => (data ?? []).filter((i) => {
     const st = invoiceStatus(i);

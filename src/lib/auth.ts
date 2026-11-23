@@ -1,15 +1,18 @@
 import 'server-only';
+import { cache } from 'react';
 import { redirect } from 'next/navigation';
 import { supabaseServer } from './supabase/server';
 import type { Profile, SystemKey } from './types';
 
-export async function getProfile(): Promise<Profile | null> {
+/** Signed-in user's profile. Deduped per request; JWT verified locally via getClaims. */
+export const getProfile = cache(async (): Promise<Profile | null> => {
   const supabase = await supabaseServer();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return null;
-  const { data } = await supabase.from('profiles').select('*').eq('id', user.id).single();
+  const { data: auth } = await supabase.auth.getClaims();
+  const uid = auth?.claims?.sub;
+  if (!uid) return null;
+  const { data } = await supabase.from('profiles').select('*').eq('id', uid).single();
   return (data as Profile) ?? null;
-}
+});
 
 export function homeFor(profile: Profile): string {
   if (profile.role === 'admin') return '/admin';

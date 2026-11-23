@@ -36,7 +36,7 @@ export default function SalesPage() {
     if (!onlyOpen) query = query.gte('sale_date', from).lte('sale_date', to);
     const rows = must(await query) as Sale[];
     return onlyOpen ? rows.filter((r) => saleStatus(r).bal > 0) : rows;
-  }, [from, to, onlyOpen]);
+  }, [from, to, onlyOpen], 'grain:sales');
 
   const rows = useMemo(() => (data ?? []).filter((r) => `${r.ref_no} ${r.grain_buyers?.name} ${r.grain_commodities?.name} ${r.truck_plate ?? ''}`.toLowerCase().includes(q.toLowerCase())), [data, q]);
 
@@ -190,7 +190,7 @@ export default function SalesPage() {
 function SaleDetail({ sale, onClose, onChanged }: { sale: Sale; onClose: () => void; onChanged: (s: Sale) => void }) {
   const me = useProfile();
   const db = supabaseBrowser();
-  const { data: payments, reload } = useLoad(async () => must(await db.from('grain_sale_payments').select('*').eq('sale_id', sale.id).order('paid_on')) as SalePayment[], [sale.id]);
+  const { data: payments, reload } = useLoad(async () => must(await db.from('grain_sale_payments').select('*').eq('sale_id', sale.id).order('paid_on')) as SalePayment[], [sale.id], 'grain:sale-payments');
   const st = saleStatus(sale);
   const [pay, setPay] = useState({ paid_on: today(), amount: '', method: 'cash', reference: '' });
   const [saving, setSaving] = useState(false);

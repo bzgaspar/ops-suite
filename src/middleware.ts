@@ -23,7 +23,10 @@ export async function middleware(request: NextRequest) {
     },
   );
 
-  const { data: { user } } = await supabase.auth.getUser();
+  // getClaims verifies the JWT locally (cached JWKS) instead of a round-trip to
+  // Supabase Auth on every request. It refreshes the session when it's near expiry.
+  const { data } = await supabase.auth.getClaims();
+  const user = data?.claims;
   const path = request.nextUrl.pathname;
   const isPublic = path === '/login' || path.startsWith('/api/');
 

@@ -17,7 +17,7 @@ export default function GrainDashboard() {
     const [purchases, sales, openSales, inventory, expenses] = await Promise.all([
       db.from('grain_purchases').select('id, ref_no, purchase_date, seller_name, net_kg, amount, net_payable, payment_status, grain_commodities(name)').gte('purchase_date', months[0].start).order('purchase_date', { ascending: false }).then(must),
       db.from('grain_sales').select('id, ref_no, sale_date, net_kg, amount, amount_paid, hauling_cost, grain_buyers(name), grain_commodities(name)').gte('sale_date', months[0].start).order('sale_date', { ascending: false }).then(must),
-      db.from('grain_sales').select('amount, amount_paid').then(must),
+      db.from('grain_sales_open').select('amount, amount_paid').then(must),
       db.from('grain_inventory').select('*').then(must),
       db.from('grain_expenses').select('expense_date, amount').gte('expense_date', months[0].start).then(must),
     ]);
@@ -26,7 +26,7 @@ export default function GrainDashboard() {
       openSales: openSales as Pick<Sale, 'amount' | 'amount_paid'>[], inventory: inventory as InventoryRow[],
       expenses: expenses as { expense_date: string; amount: number }[],
     };
-  });
+  }, [], 'grain:dashboard');
 
   if (loading || !data) return <Spinner />;
   const t = today(), ms = monthStart();

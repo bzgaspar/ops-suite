@@ -11,7 +11,7 @@ type F = Record<string, string>;
 
 export default function CustomerForm({ customer, onClose, onSaved }: { customer?: Customer; onClose: () => void; onSaved: (id: string) => void }) {
   const db = supabaseBrowser();
-  const { data: plans } = useLoad(async () => must(await db.from('isp_plans').select('*').order('monthly_fee')) as Plan[]);
+  const { data: plans } = useLoad(async () => must(await db.from('isp_plans').select('*').order('monthly_fee')) as Plan[], [], 'isp:plans');
   const [f, setF] = useState<F>(() => {
     const c = customer;
     return {

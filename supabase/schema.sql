@@ -59,7 +59,7 @@ $$;
 alter table public.profiles enable row level security;
 drop policy if exists profiles_select on public.profiles;
 create policy profiles_select on public.profiles
-  for select using (id = auth.uid() or public.is_admin());
+  for select using (id = (select auth.uid()) or (select public.is_admin()));
 -- Writes to profiles happen only through the server (service role) in /api/admin/users.
 
 -- -----------------------------------------------------------------------------
@@ -273,6 +273,12 @@ left join (select commodity_id, sum(net_kg) kg, sum(amount) cost from public.gra
 left join (select commodity_id, sum(net_kg) kg from public.grain_sales group by 1) s on s.commodity_id = c.id
 left join (select commodity_id, sum(kg) kg from public.grain_stock_adjustments group by 1) a on a.commodity_id = c.id;
 
+-- Sales not yet fully paid by the buyer (dashboard receivables).
+create or replace view public.grain_sales_open with (security_invoker = true) as
+select id, amount, amount_paid
+from public.grain_sales
+where amount_paid < amount - 0.005;
+
 -- -----------------------------------------------------------------------------
 -- ISP: internet billing & collection
 -- -----------------------------------------------------------------------------
@@ -469,17 +475,41 @@ begin
     execute format('drop policy if exists sys_delete on public.%I', t);
 
     if mgr_only then
-      execute format('create policy sys_select on public.%I for select using (public.is_system_manager(%L))', t, sys);
-      execute format('create policy sys_insert on public.%I for insert with check (public.is_system_manager(%L))', t, sys);
-      execute format('create policy sys_update on public.%I for update using (public.is_system_manager(%L)) with check (public.is_system_manager(%L))', t, sys, sys);
+      execute format('create policy sys_select on public.%I for select using ((select public.is_system_manager(%L)))', t, sys);
+      execute format('create policy sys_insert on public.%I for insert with check ((select public.is_system_manager(%L)))', t, sys);
+      execute format('create policy sys_update on public.%I for update using ((select public.is_system_manager(%L))) with check ((select public.is_system_manager(%L)))', t, sys, sys);
     else
-      execute format('create policy sys_select on public.%I for select using (public.has_system(%L))', t, sys);
-      execute format('create policy sys_insert on public.%I for insert with check (public.has_system(%L))', t, sys);
-      execute format('create policy sys_update on public.%I for update using (public.has_system(%L)) with check (public.has_system(%L))', t, sys, sys);
+      execute format('create policy sys_select on public.%I for select using ((select public.has_system(%L)))', t, sys);
+      execute format('create policy sys_insert on public.%I for insert with check ((select public.has_system(%L)))', t, sys);
+      execute format('create policy sys_update on public.%I for update using ((select public.has_system(%L))) with check ((select public.has_system(%L)))', t, sys, sys);
     end if;
-    execute format('create policy sys_delete on public.%I for delete using (public.is_system_manager(%L))', t, sys);
+    execute format('create policy sys_delete on public.%I for delete using ((select public.is_system_manager(%L)))', t, sys);
   end loop;
 end $$;
+
+-- Indexes on foreign keys / lookup columns (joins, triggers, per-customer ledgers).
+create index if not exists grain_purchases_farmer_idx     on public.grain_purchases (farmer_id);
+create index if not exists grain_purchases_commodity_idx  on public.grain_purchases (commodity_id);
+create index if not exists grain_sales_buyer_idx          on public.grain_sales (buyer_id);
+create index if not exists grain_sales_commodity_idx      on public.grain_sales (commodity_id);
+create index if not exists grain_sale_payments_sale_idx   on public.grain_sale_payments (sale_id);
+create index if not exists grain_stock_adj_commodity_idx  on public.grain_stock_adjustments (commodity_id);
+create index if not exists grain_payroll_lines_emp_idx    on public.grain_payroll_lines (employee_id);
+create index if not exists isp_payroll_lines_emp_idx      on public.isp_payroll_lines (employee_id);
+create index if not exists isp_customers_plan_idx         on public.isp_customers (plan_id);
+create index if not exists isp_invoices_customer_idx      on public.isp_invoices (customer_id, due_date);
+create index if not exists isp_payments_customer_idx      on public.isp_payments (customer_id);
+create index if not exists isp_notices_customer_idx       on public.isp_notices (customer_id);
+
+-- Table privileges. Newer Supabase projects don't auto-grant API roles access to
+-- new tables, so grant explicitly. RLS policies above still decide which rows.
+grant usage on schema public to authenticated, service_role;
+grant select, insert, update, delete on all tables in schema public to authenticated;
+revoke insert, update, delete on public.profiles from authenticated;  -- profiles: server only
+grant all on all tables in schema public to service_role;
+grant usage, select on all sequences in schema public to service_role;
+grant execute on function public.is_admin(), public.has_system(text), public.is_system_manager(text)
+  to authenticated, service_role;
 
 -- Sequences used by default values must be usable by signed-in users.
 grant usage, select on all sequences in schema public to authenticated;

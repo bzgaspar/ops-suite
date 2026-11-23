@@ -21,9 +21,9 @@ export default function PaymentsPage() {
   const [q, setQ] = useState('');
   const [adding, setAdding] = useState(false);
   const [receipt, setReceipt] = useState<Payment | null>(null);
-  const { data: customers, reload: reloadCustomers } = useLoad(loadCustomers);
+  const { data: customers, reload: reloadCustomers } = useLoad(loadCustomers, [], 'isp:customers');
   const { data, loading, reload } = useLoad(async () =>
-    must(await db.from('isp_payments').select('*, isp_customers(full_name, account_no, address)').gte('paid_on', from).lte('paid_on', to).order('paid_on', { ascending: false }).order('created_at', { ascending: false })) as Payment[], [from, to]);
+    must(await db.from('isp_payments').select('*, isp_customers(full_name, account_no, address)').gte('paid_on', from).lte('paid_on', to).order('paid_on', { ascending: false }).order('created_at', { ascending: false })) as Payment[], [from, to], 'isp:payments');
 
   const rows = useMemo(() => (data ?? []).filter((p) => `${p.receipt_no} ${p.isp_customers?.full_name} ${p.isp_customers?.account_no} ${p.reference ?? ''} ${p.collector ?? ''}`.toLowerCase().includes(q.toLowerCase())), [data, q]);
   const byCollector = groupSum(rows, (p) => p.collector || '—', { amt: (p) => n(p.amount), cnt: () => 1 });
