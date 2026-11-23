@@ -1,0 +1,32 @@
+{
+  "version": "0.2",
+  "language": "en",
+  "ignorePaths": ["node_modules", ".next", "package-lock.json", "supabase/.temp", "*.tsbuildinfo"],
+  "words": [
+    "barangay",
+    "gcash",
+    "Hino",
+    "IBIG",
+    "Isuzu",
+    "jwks",
+    "kargador",
+    "lucide",
+    "mbps",
+    "nextval",
+    "opssuite",
+    "pakyaw",
+    "pahinante",
+    "palay",
+    "philhealth",
+    "PGRST",
+    "plpgsql",
+    "postgrest",
+    "pppoe",
+    "schemaname",
+    "supabase",
+    "tablename",
+    "tsbuildinfo",
+    "upsert"
+  ],
+  "ignoreWords": ["cust", "trunc"]
+}

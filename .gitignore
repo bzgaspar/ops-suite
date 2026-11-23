@@ -11,3 +11,4 @@ next-env.d.ts
 
 # Local-only seeds (contain credentials)
 supabase/*.local.sql
+supabase/.temp/

@@ -17,12 +17,14 @@ export function isAuthError(e: unknown): boolean {
 }
 
 // Unique-constraint names / key columns → what the user should hear.
+// Matches either the detail "Key (col)=…" or the constraint name in the message (details can be absent).
 const DUPLICATES: [RegExp, string][] = [
   [/isp_invoices_one_monthly|\(customer_id, period_month\)/, 'This customer already has a bill for that month.'],
-  [/\(period_id, employee_id\)/, 'This employee is already in this payroll.'],
-  [/\(username\)/, 'That username is already taken.'],
-  [/\(name\)/, 'That name already exists.'],
-  [/\(ref_no\)|\(invoice_no\)|\(receipt_no\)|\(account_no\)/, 'That reference number is already used. Please try again.'],
+  [/period_id_employee_id_key|\(period_id, employee_id\)/, 'This employee is already in this payroll.'],
+  [/username_key|\(username\)/, 'That username is already taken.'],
+  [/plate_no_key|\(plate_no\)/, 'A vehicle with that plate number already exists.'],
+  [/_name_key|\(name\)/, 'That name already exists.'],
+  [/(ref_no|invoice_no|receipt_no|account_no)_key|\((ref_no|invoice_no|receipt_no|account_no)\)/, 'That reference number is already used. Please try again.'],
 ];
 
 export function friendlyError(e: unknown, fallback = 'Something went wrong. Please try again.'): string {
