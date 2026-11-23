@@ -10,6 +10,7 @@ import { useProfile } from '@/components/layout/AppShell';
 import { useGrainLookups } from '@/components/grain/useGrainLookups';
 import { saleStatus } from '@/components/grain/sale-status';
 import { useFleetLookups, type Driver } from '@/components/grain/fleet';
+import { PriceHint, startingPrice, useRecentPrices } from '@/components/grain/prices';
 import QuickExpense from '@/components/grain/QuickExpense';
 import type { Expense, Sale, SalePayment, Vehicle } from '@/lib/types';
 
@@ -26,6 +27,7 @@ export default function SalesPage() {
   const db = supabaseBrowser();
   const { data: lk } = useGrainLookups();
   const { data: fleet } = useFleetLookups();
+  const { data: prices, reload: reloadPrices } = useRecentPrices('sell');
   const [from, setFrom] = useState(monthStart());
   const [to, setTo] = useState(monthEnd());
   const [q, setQ] = useState('');
@@ -51,7 +53,7 @@ export default function SalesPage() {
 
   const openNew = () => {
     const c = lk?.commodities.find((x) => x.active);
-    setForm({ sale_date: today(), buyer_id: lk?.buyers.find((b) => b.active)?.id ?? '', commodity_id: c?.id ?? '', sacks: '', gross_kg: '', tare_kg: '', deduction_kg: '', price_per_kg: c ? String(c.sell_price) : '', hauling_cost: '', truck_plate: '', driver: '', remarks: '', vehicle_id: '', driver_id: '', driver_fee: '' });
+    setForm({ sale_date: today(), buyer_id: lk?.buyers.find((b) => b.active)?.id ?? '', commodity_id: c?.id ?? '', sacks: '', gross_kg: '', tare_kg: '', deduction_kg: '', price_per_kg: startingPrice('sell', c, prices), hauling_cost: '', truck_plate: '', driver: '', remarks: '', vehicle_id: '', driver_id: '', driver_fee: '' });
   };
   const openEdit = (r: Sale) => setForm({
     id: r.id, sale_date: r.sale_date, buyer_id: r.buyer_id, commodity_id: r.commodity_id, sacks: String(r.sacks), gross_kg: String(r.gross_kg),
@@ -92,6 +94,7 @@ export default function SalesPage() {
     setSaving(false);
     if (res.error) return notify.error(res.error);
     notify.success(`Saved ${(res.data as Sale).ref_no}`);
+    reloadPrices();
     setForm(null);
     setDetail(res.data as Sale);
     reload();
@@ -172,7 +175,7 @@ export default function SalesPage() {
               </Select>
               <Select label="Commodity" value={form.commodity_id} onChange={(e) => {
                 const c = lk.commodities.find((x) => x.id === e.target.value);
-                setForm({ ...form, commodity_id: e.target.value, price_per_kg: c ? String(c.sell_price) : form.price_per_kg });
+                setForm({ ...form, commodity_id: e.target.value, price_per_kg: c ? startingPrice('sell', c, prices) : form.price_per_kg });
               }}>
                 {lk.commodities.filter((c) => c.active || c.id === form.commodity_id).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
               </Select>
@@ -184,7 +187,10 @@ export default function SalesPage() {
               <Input label="Buyer deduction kg" type="number" step="any" value={form.deduction_kg} onChange={(e) => setForm({ ...form, deduction_kg: e.target.value })} hint="Moisture / quality" />
             </div>
             <div className="grid sm:grid-cols-4 gap-3">
-              <Input label="Price / kg (₱)" type="number" step="any" value={form.price_per_kg} onChange={(e) => setForm({ ...form, price_per_kg: e.target.value })} />
+              <div className="sm:col-span-2">
+                <Input label="Price / kg (₱)" type="number" step="any" value={form.price_per_kg} onChange={(e) => setForm({ ...form, price_per_kg: e.target.value })} onFocus={(e) => e.target.select()} />
+                <PriceHint side="sell" commodity={lk.commodities.find((c) => c.id === form.commodity_id)} prices={prices} current={form.price_per_kg} onPick={(v) => setForm({ ...form, price_per_kg: v })} />
+              </div>
             </div>
             <TripFields form={form} setForm={setForm} vehicles={fleet?.vehicles ?? []} drivers={fleet?.drivers ?? []} pickVehicle={pickVehicle} pickDriver={pickDriver} />
             <Textarea label="Remarks" value={form.remarks} onChange={(e) => setForm({ ...form, remarks: e.target.value })} />

@@ -8,6 +8,7 @@ import { fmtDate, kg, money, monthEnd, monthStart, n, round2, sum, today, qty } 
 import { Badge, Button, Card, DateRange, Empty, Input, Modal, PageHeader, Printable, SearchBox, Select, Spinner, Table, Textarea, td, tdR, th, thR, ask } from '@/components/ui';
 import { useProfile } from '@/components/layout/AppShell';
 import { useGrainLookups, moistureShrinkKg } from '@/components/grain/useGrainLookups';
+import { PriceHint, startingPrice, useRecentPrices } from '@/components/grain/prices';
 import type { Purchase } from '@/lib/types';
 
 interface Form {
@@ -20,6 +21,7 @@ export default function PurchasesPage() {
   const me = useProfile();
   const db = supabaseBrowser();
   const { data: lk } = useGrainLookups();
+  const { data: prices, reload: reloadPrices } = useRecentPrices('buy');
   const [from, setFrom] = useState(monthStart());
   const [to, setTo] = useState(monthEnd());
   const [q, setQ] = useState('');
@@ -48,7 +50,7 @@ export default function PurchasesPage() {
     setForm({
       purchase_date: today(), farmer_id: '', seller_name: '', commodity_id: c?.id ?? '', sacks: '', gross_kg: '',
       tare_per_sack: '0.5', tare_kg: '', moisture_pct: '', auto_moisture: false, moisture_deduction_kg: '',
-      price_per_kg: c ? String(c.buy_price) : '', other_deductions: '', payment_status: 'paid', remarks: '',
+      price_per_kg: startingPrice('buy', c, prices), other_deductions: '', payment_status: 'paid', remarks: '',
     });
   };
 
@@ -66,7 +68,7 @@ export default function PurchasesPage() {
     }
     if ('commodity_id' in p) {
       const c = lk?.commodities.find((x) => x.id === p.commodity_id);
-      if (c) next.price_per_kg = String(c.buy_price);
+      if (c) next.price_per_kg = startingPrice('buy', c, prices);
     }
     if ('farmer_id' in p) {
       const fm = lk?.farmers.find((x) => x.id === p.farmer_id);
@@ -94,6 +96,7 @@ export default function PurchasesPage() {
     setSaving(false);
     if (res.error) return notify.error(res.error);
     notify.success(`Saved ${(res.data as Purchase).ref_no}`);
+    reloadPrices();
     setForm(null);
     setReceipt(res.data as Purchase);
     reload();
@@ -182,7 +185,10 @@ export default function PurchasesPage() {
               <Select label="Commodity" value={form.commodity_id} onChange={(e) => patch({ commodity_id: e.target.value })}>
                 {lk.commodities.filter((c) => c.active || c.id === form.commodity_id).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
               </Select>
-              <Input label="Price per kg (₱)" type="number" step="any" value={form.price_per_kg} onChange={(e) => patch({ price_per_kg: e.target.value })} />
+              <div>
+                <Input label="Price per kg (₱)" type="number" step="any" value={form.price_per_kg} onChange={(e) => patch({ price_per_kg: e.target.value })} onFocus={(e) => e.target.select()} />
+                <PriceHint side="buy" commodity={lk.commodities.find((c) => c.id === form.commodity_id)} prices={prices} current={form.price_per_kg} onPick={(v) => patch({ price_per_kg: v })} />
+              </div>
               <Input label="No. of sacks" type="number" value={form.sacks} onChange={(e) => patch({ sacks: e.target.value })} />
             </div>
             <div className="grid sm:grid-cols-3 gap-3">
