@@ -1,6 +1,6 @@
 import {
   LayoutDashboard, Users, ShoppingBasket, Truck, Warehouse, Sprout, Building2, Tags, Receipt,
-  UserCog, Banknote, BarChart3, Wifi, FileText, Wallet, BellRing, Package, Shield,
+  UserCog, Banknote, BarChart3, Wifi, FileText, Wallet, BellRing, Package, Shield, Car, Route,
   type LucideIcon,
 } from 'lucide-react';
 import type { Role } from '@/lib/types';
@@ -23,6 +23,8 @@ export const NAV: Record<Area, NavItem[]> = {
     { href: '/grain', label: 'Dashboard', icon: LayoutDashboard },
     { href: '/grain/purchases', label: 'Buying (Purchases)', icon: ShoppingBasket },
     { href: '/grain/sales', label: 'Selling (Big Buyers)', icon: Truck },
+    { href: '/grain/trips', label: 'Trips & Drivers', icon: Route },
+    { href: '/grain/vehicles', label: 'Vehicles', icon: Car },
     { href: '/grain/inventory', label: 'Inventory', icon: Warehouse },
     { href: '/grain/farmers', label: 'Farmers / Sellers', icon: Sprout },
     { href: '/grain/buyers', label: 'Big Buyers', icon: Building2 },

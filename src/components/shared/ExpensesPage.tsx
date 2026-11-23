@@ -7,10 +7,11 @@ import { useLoad, must } from '@/lib/hooks';
 import { fmtDate, money, monthEnd, monthStart, n, sum, today } from '@/lib/format';
 import { Button, Card, DateRange, Empty, Input, Modal, PageHeader, Select, Spinner, Table, Textarea, td, tdR, th, thR, ask } from '@/components/ui';
 import { useProfile } from '@/components/layout/AppShell';
+import { useFleetLookups } from '@/components/grain/fleet';
 import type { Expense, SystemKey } from '@/lib/types';
 
 export const EXPENSE_CATEGORIES: Record<SystemKey, string[]> = {
-  grain: ['Food / Meals', 'Fuel', 'Hauling / Trucking', 'Labor (Kargador / Pakyaw)', 'Drying', 'Sacks & Supplies', 'Repairs & Maintenance', 'Electricity', 'Rent', 'Permits & Fees', 'Other'],
+  grain: ['Food / Meals', 'Fuel', 'Toll & Parking', 'Hauling / Trucking', 'Labor (Kargador / Pakyaw)', 'Drying', 'Sacks & Supplies', 'Repairs & Maintenance', 'Tires & Parts', 'Vehicle Registration & Insurance', 'Electricity', 'Rent', 'Permits & Fees', 'Other'],
   isp: ['Bandwidth / Upstream', 'Equipment & Materials', 'Fuel / Transportation', 'Food / Meals', 'Electricity', 'Rent / Pole Rental', 'Repairs & Maintenance', 'Collector Commission', 'Permits & Fees', 'Other'],
 };
 
@@ -26,11 +27,15 @@ export default function ExpensesPage({ system }: { system: SystemKey }) {
   const [form, setForm] = useState<Form | null>(null);
   const [saving, setSaving] = useState(false);
   const categories = EXPENSE_CATEGORIES[system];
+  const isGrain = system === 'grain';
+  const { data: fleet } = useFleetLookups(system === 'grain');
+  const vehicles = isGrain ? fleet?.vehicles ?? [] : [];
+  const [veh, setVeh] = useState('');
 
   const { data, loading, reload } = useLoad(async () =>
-    must(await db.from(table).select('*').gte('expense_date', from).lte('expense_date', to).order('expense_date', { ascending: false })) as Expense[], [from, to], `expenses:${table}`);
+    must(await db.from(table).select(isGrain ? '*, grain_vehicles!grain_expenses_vehicle_id_fkey(plate_no), grain_sales!grain_expenses_sale_id_fkey(ref_no)' : '*').gte('expense_date', from).lte('expense_date', to).order('expense_date', { ascending: false })) as Expense[], [from, to], `expenses:${table}`);
 
-  const rows = (data ?? []).filter((r) => !cat || r.category === cat);
+  const rows = (data ?? []).filter((r) => (!cat || r.category === cat) && (!veh || r.vehicle_id === veh));
   const byCat = useMemo(() => {
     const m = new Map<string, number>();
     (data ?? []).forEach((r) => m.set(r.category, (m.get(r.category) ?? 0) + n(r.amount)));
@@ -43,7 +48,9 @@ export default function ExpensesPage({ system }: { system: SystemKey }) {
     const values = {
       expense_date: form.expense_date, category: form.category, description: form.description || null,
       amount: n(form.amount), paid_to: form.paid_to || null, reference: form.reference || null,
+      ...(isGrain ? { vehicle_id: form.vehicle_id || null } : {}),
     };
+    if (saving) return;
     setSaving(true);
     const res = form.id ? await db.from(table).update(values).eq('id', form.id) : await db.from(table).insert(values);
     setSaving(false);
@@ -73,6 +80,12 @@ export default function ExpensesPage({ system }: { system: SystemKey }) {
               <option value="">All categories</option>
               {categories.map((c) => <option key={c}>{c}</option>)}
             </select>
+            {vehicles.length > 0 && (
+              <select value={veh} onChange={(e) => setVeh(e.target.value)} className="rounded-lg border border-slate-300 px-2.5 py-2 text-sm" aria-label="Vehicle">
+                <option value="">All vehicles</option>
+                {vehicles.map((v) => <option key={v.id} value={v.id}>{v.plate_no}</option>)}
+              </select>
+            )}
           </div>
           {loading ? <Spinner /> : rows.length === 0 ? <Empty text="No expenses in this range." /> : (
             <Table>
@@ -82,7 +95,10 @@ export default function ExpensesPage({ system }: { system: SystemKey }) {
                   <tr key={r.id} className="hover:bg-slate-50">
                     <td className={td}>{fmtDate(r.expense_date)}</td>
                     <td className={td}>{r.category}</td>
-                    <td className={`${td} whitespace-normal min-w-[160px]`}>{r.description ?? '—'}{r.reference && <span className="text-xs text-slate-400"> · {r.reference}</span>}</td>
+                    <td className={`${td} whitespace-normal min-w-[160px]`}>
+                      {r.description ?? '—'}{r.reference && <span className="text-xs text-slate-400"> · {r.reference}</span>}
+                      {(r.grain_vehicles || r.grain_sales) && <span className="block text-xs text-slate-500">{r.grain_vehicles && <span className="font-mono">{r.grain_vehicles.plate_no}</span>}{r.grain_vehicles && r.grain_sales && ' · '}{r.grain_sales && <>trip {r.grain_sales.ref_no}</>}</span>}
+                    </td>
                     <td className={td}>{r.paid_to ?? '—'}</td>
                     <td className={`${tdR} font-medium`}>{money(r.amount)}</td>
                     <td className={`${td} text-right`}>
@@ -127,6 +143,13 @@ export default function ExpensesPage({ system }: { system: SystemKey }) {
             <Select label="Category" value={form.category ?? ''} onChange={(e) => setForm({ ...form, category: e.target.value })}>
               {categories.map((c) => <option key={c}>{c}</option>)}
             </Select>
+            {vehicles.length > 0 && (
+              <Select label="Vehicle (optional)" value={form.vehicle_id ?? ''} onChange={(e) => setForm({ ...form, vehicle_id: e.target.value })}
+                hint="Tag fuel, repairs, registration to a truck to see its running cost">
+                <option value="">— not for a vehicle —</option>
+                {vehicles.filter((v) => v.active || v.id === form.vehicle_id).map((v) => <option key={v.id} value={v.id}>{v.plate_no}{v.name ? ` · ${v.name}` : ''}</option>)}
+              </Select>
+            )}
             <Textarea label="Description" value={form.description ?? ''} onChange={(e) => setForm({ ...form, description: e.target.value })} />
             <div className="grid grid-cols-2 gap-3">
               <Input label="Paid to" value={form.paid_to ?? ''} onChange={(e) => setForm({ ...form, paid_to: e.target.value })} />

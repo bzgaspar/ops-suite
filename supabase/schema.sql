@@ -106,12 +106,13 @@ begin
         ot_hours          numeric(6,2) not null default 0,
         ot_pay            numeric(12,2) not null default 0,
         food_allowance    numeric(12,2) not null default 0,
+        trip_pay          numeric(12,2) not null default 0,  -- driver/helper pay per delivery trip
         other_pay         numeric(12,2) not null default 0,  -- bonus, incentives, holiday pay
         cash_advance      numeric(12,2) not null default 0,  -- deducted
         other_deductions  numeric(12,2) not null default 0,  -- SSS, PhilHealth, Pag-IBIG, shortages
-        gross_pay         numeric(12,2) generated always as (basic_pay + ot_pay + food_allowance + other_pay) stored,
+        gross_pay         numeric(12,2) generated always as (basic_pay + ot_pay + food_allowance + trip_pay + other_pay) stored,
         net_pay           numeric(12,2) generated always as
-                            (basic_pay + ot_pay + food_allowance + other_pay - cash_advance - other_deductions) stored,
+                            (basic_pay + ot_pay + food_allowance + trip_pay + other_pay - cash_advance - other_deductions) stored,
         remarks           text,
         unique (period_id, employee_id)
       );
@@ -128,7 +129,18 @@ begin
         created_at    timestamptz not null default now()
       );
       create index if not exists %1$s_expenses_date_idx on public.%1$s_expenses (expense_date);
+      alter table public.%1$s_employees add column if not exists trip_rate numeric(12,2) not null default 0;  -- default pay per trip
     $f$, sys);
+
+    -- Upgrade older databases: add trip_pay and include it in the generated totals.
+    if not exists (select 1 from information_schema.columns
+                   where table_schema = 'public' and table_name = sys || '_payroll_lines' and column_name = 'trip_pay') then
+      execute format('alter table public.%I add column trip_pay numeric(12,2) not null default 0, drop column gross_pay, drop column net_pay', sys || '_payroll_lines');
+      execute format($f$alter table public.%I
+        add column gross_pay numeric(12,2) generated always as (basic_pay + ot_pay + food_allowance + trip_pay + other_pay) stored,
+        add column net_pay   numeric(12,2) generated always as (basic_pay + ot_pay + food_allowance + trip_pay + other_pay - cash_advance - other_deductions) stored$f$,
+        sys || '_payroll_lines');
+    end if;
   end loop;
 end $$;
 
@@ -243,6 +255,33 @@ drop trigger if exists grain_sale_payments_sync on public.grain_sale_payments;
 create trigger grain_sale_payments_sync
   after insert or update or delete on public.grain_sale_payments
   for each row execute function public.grain_sync_sale_paid();
+
+-- Own trucks / vehicles used for deliveries
+create table if not exists public.grain_vehicles (
+  id                   uuid primary key default gen_random_uuid(),
+  plate_no             text not null unique,
+  name                 text,                              -- e.g. "Isuzu Elf 6-wheeler"
+  vehicle_type         text not null default 'truck' check (vehicle_type in ('truck','pickup','van','motorcycle','other')),
+  capacity_kg          numeric(12,2),
+  default_driver_id    uuid references public.grain_employees(id) on delete set null,
+  registration_expiry  date,                              -- LTO OR/CR renewal
+  insurance_expiry     date,
+  active               boolean not null default true,
+  notes                text,
+  created_at           timestamptz not null default now()
+);
+
+-- Each delivery (sale) is a trip: which vehicle, which driver, and the driver's pay for it.
+-- truck_plate / driver text columns stay as a printed snapshot (and for hired trucks).
+alter table public.grain_sales
+  add column if not exists vehicle_id uuid references public.grain_vehicles(id) on delete set null,
+  add column if not exists driver_id  uuid references public.grain_employees(id) on delete set null,
+  add column if not exists driver_fee numeric(12,2) not null default 0;
+
+-- Expenses can be tagged to a vehicle (fuel, repairs, registration) and/or a trip (fuel, toll, meals).
+alter table public.grain_expenses
+  add column if not exists vehicle_id uuid references public.grain_vehicles(id) on delete set null,
+  add column if not exists sale_id    uuid references public.grain_sales(id) on delete set null;
 
 -- Drying loss, spoilage, physical count corrections (+ or - kg)
 create table if not exists public.grain_stock_adjustments (
@@ -496,6 +535,11 @@ create index if not exists grain_sale_payments_sale_idx   on public.grain_sale_p
 create index if not exists grain_stock_adj_commodity_idx  on public.grain_stock_adjustments (commodity_id);
 create index if not exists grain_payroll_lines_emp_idx    on public.grain_payroll_lines (employee_id);
 create index if not exists isp_payroll_lines_emp_idx      on public.isp_payroll_lines (employee_id);
+create index if not exists grain_sales_vehicle_idx        on public.grain_sales (vehicle_id);
+create index if not exists grain_sales_driver_idx         on public.grain_sales (driver_id);
+create index if not exists grain_expenses_vehicle_idx     on public.grain_expenses (vehicle_id);
+create index if not exists grain_expenses_sale_idx        on public.grain_expenses (sale_id);
+create index if not exists grain_vehicles_driver_idx      on public.grain_vehicles (default_driver_id);
 create index if not exists isp_customers_plan_idx         on public.isp_customers (plan_id);
 create index if not exists isp_invoices_customer_idx      on public.isp_invoices (customer_id, due_date);
 create index if not exists isp_payments_customer_idx      on public.isp_payments (customer_id);

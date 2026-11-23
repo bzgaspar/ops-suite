@@ -20,6 +20,7 @@ export interface Employee {
   rate: number;
   ot_rate_per_hour: number;
   food_allowance_per_day: number;
+  trip_rate: number;
   hired_on: string | null;
   active: boolean;
   notes: string | null;
@@ -44,6 +45,7 @@ export interface PayrollLine {
   ot_hours: number;
   ot_pay: number;
   food_allowance: number;
+  trip_pay: number;
   other_pay: number;
   cash_advance: number;
   other_deductions: number;
@@ -60,10 +62,29 @@ export interface Expense {
   amount: number;
   paid_to: string | null;
   reference: string | null;
+  vehicle_id?: string | null;
+  sale_id?: string | null;
   created_at: string;
+  grain_vehicles?: { plate_no: string } | null;
+  grain_sales?: { ref_no: string } | null;
 }
 
 // ---- Grain ----
+export type VehicleType = 'truck' | 'pickup' | 'van' | 'motorcycle' | 'other';
+export interface Vehicle {
+  id: string;
+  plate_no: string;
+  name: string | null;
+  vehicle_type: VehicleType;
+  capacity_kg: number | null;
+  default_driver_id: string | null;
+  registration_expiry: string | null;
+  insurance_expiry: string | null;
+  active: boolean;
+  notes: string | null;
+  created_at: string;
+}
+
 export interface Commodity {
   id: string;
   name: string;
@@ -125,11 +146,15 @@ export interface Sale {
   hauling_cost: number;
   truck_plate: string | null;
   driver: string | null;
+  vehicle_id: string | null;
+  driver_id: string | null;
+  driver_fee: number;
   amount_paid: number;
   remarks: string | null;
   created_at: string;
   grain_commodities?: { name: string } | null;
   grain_buyers?: { name: string; company: string | null } | null;
+  grain_vehicles?: { plate_no: string } | null;
 }
 
 export interface SalePayment {

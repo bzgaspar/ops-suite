@@ -19,17 +19,17 @@ export default function GrainReports() {
   const { data, loading } = useLoad(async () => {
     const [purchases, sales, saleCollections, expenses, inv, periods] = await Promise.all([
       db.from('grain_purchases').select('*, grain_commodities(name)').gte('purchase_date', from).lte('purchase_date', to).then(must),
-      db.from('grain_sales').select('*, grain_commodities(name), grain_buyers(name, company)').gte('sale_date', from).lte('sale_date', to).then(must),
+      db.from('grain_sales').select('*, grain_commodities(name), grain_buyers(name, company), grain_vehicles!grain_sales_vehicle_id_fkey(plate_no)').gte('sale_date', from).lte('sale_date', to).then(must),
       db.from('grain_sale_payments').select('amount').gte('paid_on', from).lte('paid_on', to).then(must),
-      db.from('grain_expenses').select('*').gte('expense_date', from).lte('expense_date', to).then(must),
+      db.from('grain_expenses').select('*, grain_vehicles!grain_expenses_vehicle_id_fkey(plate_no)').gte('expense_date', from).lte('expense_date', to).then(must),
       db.from('grain_inventory').select('*').then(must),
       db.from('grain_payroll_periods').select('id').gte('period_end', from).lte('period_end', to).then(must),
     ]);
     const ids = (periods as { id: string }[]).map((p) => p.id);
-    const lines = ids.length ? must(await db.from('grain_payroll_lines').select('gross_pay, net_pay, cash_advance, other_deductions').in('period_id', ids)) : [];
+    const lines = ids.length ? must(await db.from('grain_payroll_lines').select('gross_pay, net_pay, trip_pay, cash_advance, other_deductions').in('period_id', ids)) : [];
     return {
       purchases: purchases as Purchase[], sales: sales as Sale[], collections: saleCollections as { amount: number }[],
-      expenses: expenses as Expense[], inv: inv as InventoryRow[], payroll: lines as { gross_pay: number; net_pay: number }[],
+      expenses: expenses as Expense[], inv: inv as InventoryRow[], payroll: lines as { gross_pay: number; net_pay: number; trip_pay: number }[],
     };
   }, [from, to], 'grain:reports');
 
@@ -52,6 +52,11 @@ export default function GrainReports() {
     const byBuyer = groupSum(data.sales, (s) => s.grain_buyers?.company || s.grain_buyers?.name || '?', { kg: (s) => n(s.net_kg), amt: (s) => n(s.amount), bal: (s) => n(s.amount) - n(s.amount_paid) });
     const byFarmer = groupSum(data.purchases, (p) => p.seller_name, { kg: (p) => n(p.net_kg), amt: (p) => n(p.net_payable), n: () => 1 }).sort((a, b) => b.kg - a.kg).slice(0, 15);
     const byCat = groupSum(data.expenses, (e) => e.category, { amt: (e) => n(e.amount) }).sort((a, b) => b.amt - a.amt);
+    type FleetRow = { plate: string; trips: number; kg: number; fees: number; exp: number };
+    const fleet = groupSum([
+      ...data.sales.filter((s) => s.vehicle_id).map((s): FleetRow => ({ plate: s.grain_vehicles?.plate_no ?? '?', trips: 1, kg: n(s.net_kg), fees: n(s.driver_fee), exp: 0 })),
+      ...data.expenses.filter((e) => e.vehicle_id).map((e): FleetRow => ({ plate: e.grain_vehicles?.plate_no ?? '?', trips: 0, kg: 0, fees: 0, exp: n(e.amount) })),
+    ], (r) => r.plate, { trips: (r) => r.trips, kg: (r) => r.kg, fees: (r) => r.fees, exp: (r) => r.exp }).sort((a, b) => b.trips - a.trips);
 
     return (
       <div className="space-y-5">
@@ -61,8 +66,8 @@ export default function GrainReports() {
             <PLRow label="Sales to buyers" value={revenue} />
             <PLRow label="Cost of grain sold (at average buying cost)" value={cogs} negative indent />
             <PLRow label="Gross profit" value={gross} strong tone={gross >= 0 ? 'good' : 'bad'} />
-            <PLRow label="Hauling / trucking" value={hauling} negative indent />
-            <PLRow label="Payroll (gross pay, incl. OT & food)" value={payroll} negative indent />
+            <PLRow label="Hired trucking" value={hauling} negative indent />
+            <PLRow label="Payroll (gross pay, incl. OT, food & trip pay)" value={payroll} negative indent />
             <PLRow label="Operating expenses" value={expenses} negative indent />
             <PLRow label="NET PROFIT" value={net} strong tone={net >= 0 ? 'good' : 'bad'} />
           </Card>
@@ -71,7 +76,7 @@ export default function GrainReports() {
             <PLRow label="Collected from buyers" value={sum(data.collections, (c) => c.amount)} />
             <PLRow label="Paid to farmers (paid purchases)" value={sum(data.purchases.filter((p) => p.payment_status === 'paid'), (p) => p.net_payable)} negative indent />
             <PLRow label="Payroll released (net pay)" value={sum(data.payroll, (l) => l.net_pay)} negative indent />
-            <PLRow label="Hauling" value={hauling} negative indent />
+            <PLRow label="Hired trucking" value={hauling} negative indent />
             <PLRow label="Expenses" value={expenses} negative indent />
             <div className="mt-3 text-xs text-slate-500 space-y-0.5">
               <p>Still owed to farmers (this range): <b>{money(sum(data.purchases.filter((p) => p.payment_status === 'unpaid'), (p) => p.net_payable))}</b></p>
@@ -106,6 +111,18 @@ export default function GrainReports() {
             </Table>
           </Card>
         </div>
+
+        {fleet.length > 0 && (
+          <Card className="avoid-break">
+            <div className="px-4 py-3 border-b border-slate-200 font-semibold">Vehicles</div>
+            <Table>
+              <thead><tr><th className={th}>Plate</th><th className={thR}>Trips</th><th className={thR}>Hauled</th><th className={thR}>Expenses</th><th className={thR}>Driver trip pay</th><th className={thR}>Cost / trip</th></tr></thead>
+              <tbody>{fleet.map((r) => (
+                <tr key={r.key}><td className={`${td} font-mono`}>{r.key}</td><td className={tdR}>{r.trips}</td><td className={tdR}>{kg(r.kg)}</td><td className={tdR}>{money(r.exp)}</td><td className={tdR}>{money(r.fees)}</td><td className={tdR}>{r.trips ? money((r.exp + r.fees) / r.trips) : '—'}</td></tr>
+              ))}</tbody>
+            </Table>
+          </Card>
+        )}
 
         <Card className="avoid-break">
           <div className="px-4 py-3 border-b border-slate-200 font-semibold">Expenses by category</div>

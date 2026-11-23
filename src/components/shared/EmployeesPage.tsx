@@ -1,7 +1,7 @@
 'use client';
 import CrudPage from './CrudPage';
 import { Badge } from '@/components/ui';
-import { money } from '@/lib/format';
+import { money, n } from '@/lib/format';
 import type { Employee, SystemKey } from '@/lib/types';
 
 export default function EmployeesPage({ system }: { system: SystemKey }) {
@@ -22,6 +22,7 @@ export default function EmployeesPage({ system }: { system: SystemKey }) {
         { key: 'rate', label: 'Rate (₱ per day or per month)', type: 'number', required: true },
         { key: 'ot_rate_per_hour', label: 'Overtime rate (₱ / hour)', type: 'number' },
         { key: 'food_allowance_per_day', label: 'Food allowance (₱ / day)', type: 'number' },
+        ...(system === 'grain' ? [{ key: 'trip_rate', label: 'Pay per delivery trip (₱)', type: 'number' as const, hint: 'For drivers / helpers. Pre-fills driver pay on each delivery.' }] : []),
         { key: 'active', label: 'Active', type: 'checkbox', default: true },
         { key: 'notes', label: 'Notes', type: 'textarea' },
       ]}
@@ -31,6 +32,7 @@ export default function EmployeesPage({ system }: { system: SystemKey }) {
         { label: 'Rate', right: true, render: (r) => `${money(r.rate)} / ${r.pay_type === 'daily' ? 'day' : 'month'}` },
         { label: 'OT / hr', right: true, render: (r) => money(r.ot_rate_per_hour) },
         { label: 'Food / day', right: true, render: (r) => money(r.food_allowance_per_day) },
+        ...(system === 'grain' ? [{ label: 'Per trip', right: true, render: (r: Employee) => (n(r.trip_rate) ? money(r.trip_rate) : '—') }] : []),
         { label: 'Status', render: (r) => (r.active ? <Badge tone="green">active</Badge> : <Badge>inactive</Badge>) },
       ]}
     />

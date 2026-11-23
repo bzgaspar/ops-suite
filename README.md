@@ -71,12 +71,14 @@ Users sign in with a **username** (no e-mail needed). Internally the username ma
 ## Palay & Corn Buying Station (`/grain`)
 
 - **Buying (Purchases):** farmer or walk-in seller, commodity, sacks, gross kg, tare per sack, moisture % with an optional **auto-deduct to 14%** standard, price/kg, other deductions (cash advance, hauling), paid/unpaid. Prints a purchase receipt.
-- **Selling (Big Buyers):** deliveries to mills or traders with the buyer's deduction, hauling cost, truck plate and driver. Supports **partial payments** (receivables) and prints a delivery receipt.
+- **Selling (Big Buyers):** deliveries to mills or traders with the buyer's deduction. Each delivery is a **trip**: pick one of your vehicles (or a hired truck), the driver, and the driver's pay for the trip. Supports **partial payments** (receivables) and prints a delivery receipt.
+- **Trips & Drivers:** every trip with its vehicle, driver, driver pay, trip expenses (fuel, toll, meals) and hired-truck cost. Totals by driver and by vehicle; filter by either.
+- **Vehicles:** plate number, make/model, type, capacity, default driver, and **registration / insurance expiry** with renewal warnings (also shown on the dashboard). Shows trips, kg hauled, expenses and **cost per trip** for each vehicle.
 - **Inventory:** stock = bought − sold ± adjustments (drying loss, spoilage, recount), with average cost and stock value.
 - **Farmers, Big Buyers, Commodities & Prices:** master lists. The commodity prices are the defaults for new transactions.
-- **Expenses:** food, fuel, hauling, kargador/pakyaw labor, drying, sacks, utilities, etc.
-- **Personnel & Payroll:** daily or monthly rate, **overtime/hour**, **food allowance/day**, other pay, cash advance and other deductions. Entering days worked fills in basic pay and food allowance, and OT hours fills in OT pay. Payroll can be marked paid (locked), and payslips can be printed.
-- **Reports:** P&L (sales − cost of grain sold − hauling − payroll − expenses), cash movement, and breakdowns by commodity, buyer and farmer.
+- **Expenses:** food, fuel, tolls, hauling, kargador/pakyaw labor, drying, sacks, repairs, tires, registration, utilities, etc. An expense can be tagged to a vehicle and/or a trip.
+- **Personnel & Payroll:** daily or monthly rate, **overtime/hour**, **food allowance/day**, **pay per trip** (drivers/helpers), other pay, cash advance and other deductions. Entering days worked fills in basic pay and food allowance, and OT hours fills in OT pay. Drivers' **trip pay** for deliveries in the period is added automatically (and can be reloaded with *Load trip pay*). Payroll can be marked paid (locked), and payslips can be printed.
+- **Reports:** P&L (sales − cost of grain sold − hired trucking − payroll − expenses), cash movement, and breakdowns by commodity, buyer, farmer and vehicle.
 
 ## Internet Billing & Collection (`/isp`)
 

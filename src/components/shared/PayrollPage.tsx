@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useMemo, useState } from 'react';
-import { Plus, Printer, Save, CheckCircle2, RotateCcw, Trash2, UserPlus } from 'lucide-react';
+import { Plus, Printer, Save, CheckCircle2, RotateCcw, Trash2, UserPlus, Truck } from 'lucide-react';
 import { differenceInCalendarDays, parseISO } from 'date-fns';
 import { notify } from '@/lib/notify';
 import { supabaseBrowser } from '@/lib/supabase/client';
@@ -14,16 +14,29 @@ const SYSTEM_TITLE: Record<SystemKey, string> = { grain: 'Palay & Corn Buying St
 
 type Line = Omit<PayrollLine, 'id' | 'gross_pay' | 'net_pay'> & { id?: string };
 
-const grossOf = (l: Line) => n(l.basic_pay) + n(l.ot_pay) + n(l.food_allowance) + n(l.other_pay);
+const grossOf = (l: Line) => n(l.basic_pay) + n(l.ot_pay) + n(l.food_allowance) + n(l.trip_pay) + n(l.other_pay);
 const netOf = (l: Line) => grossOf(l) - n(l.cash_advance) - n(l.other_deductions);
 
-function defaultLine(periodId: string, e: Employee, period: PayrollPeriod): Line {
+type TripPay = Map<string, { fee: number; trips: number }>;
+
+/** Grain only: per-driver trip pay from deliveries dated inside the payroll period. */
+async function loadTripPay(period: Pick<PayrollPeriod, 'period_start' | 'period_end'>): Promise<TripPay> {
+  const rows = must(await supabaseBrowser().from('grain_sales').select('driver_id, driver_fee')
+    .not('driver_id', 'is', null).gte('sale_date', period.period_start).lte('sale_date', period.period_end)) as { driver_id: string; driver_fee: number }[];
+  const m: TripPay = new Map();
+  rows.forEach((r) => { const t = m.get(r.driver_id) ?? { fee: 0, trips: 0 }; t.fee += n(r.driver_fee); t.trips++; m.set(r.driver_id, t); });
+  m.forEach((t) => { t.fee = round2(t.fee); });
+  return m;
+}
+
+function defaultLine(periodId: string, e: Employee, period: PayrollPeriod, trip?: { fee: number; trips: number }): Line {
   const periodDays = differenceInCalendarDays(parseISO(period.period_end), parseISO(period.period_start)) + 1;
   const monthlyBasic = periodDays >= 28 ? n(e.rate) : round2(n(e.rate) / 2);
   return {
     period_id: periodId, employee_id: e.id, days_worked: 0,
     basic_pay: e.pay_type === 'monthly' ? monthlyBasic : 0,
-    ot_hours: 0, ot_pay: 0, food_allowance: 0, other_pay: 0, cash_advance: 0, other_deductions: 0, remarks: null,
+    ot_hours: 0, ot_pay: 0, food_allowance: 0, trip_pay: trip?.fee ?? 0, other_pay: 0, cash_advance: 0, other_deductions: 0,
+    remarks: trip?.trips ? `${trip.trips} trip(s)` : null,
   };
 }
 
@@ -31,6 +44,8 @@ export default function PayrollPage({ system }: { system: SystemKey }) {
   const me = useProfile();
   const db = supabaseBrowser();
   const T = { periods: `${system}_payroll_periods`, lines: `${system}_payroll_lines`, emps: `${system}_employees` };
+  const isGrain = system === 'grain';
+  const [syncingTrips, setSyncingTrips] = useState(false);
 
   const { data: periods, loading, reload } = useLoad(async () => {
     const [ps, ls] = await Promise.all([
@@ -92,12 +107,18 @@ export default function PayrollPage({ system }: { system: SystemKey }) {
     const { data, error } = await db.from(T.periods).insert({ period_start: newPeriod.period_start, period_end: newPeriod.period_end, notes: newPeriod.notes || null }).select().single();
     if (error) return notify.error(error);
     const period = data as PayrollPeriod;
-    const active = (employees ?? []).filter((e) => e.active);
+    let trips: TripPay = new Map();
+    if (isGrain) {
+      try { trips = await loadTripPay(period); } catch (e) { notify.error(e, 'Could not load trip pay. Use "Load trip pay" to try again.'); }
+    }
+    // Active staff, plus anyone (even inactive) who drove a trip in this period.
+    const active = (employees ?? []).filter((e) => e.active || trips.has(e.id));
     if (active.length) {
-      const { error: lErr } = await db.from(T.lines).insert(active.map((e) => defaultLine(period.id, e, period)));
+      const { error: lErr } = await db.from(T.lines).insert(active.map((e) => defaultLine(period.id, e, period, trips.get(e.id))));
       if (lErr) notify.error(lErr);
     }
-    notify.success(`Payroll created with ${active.length} employee(s). Enter days worked and overtime.`);
+    const tripCount = [...trips.values()].reduce((a, t) => a + t.trips, 0);
+    notify.success(`Payroll created with ${active.length} employee(s)${tripCount ? ` and ${tripCount} trip(s)` : ''}. Enter days worked and overtime.`);
     setNewPeriod(null);
     setSelectedId(period.id);
     reload();
@@ -156,6 +177,26 @@ export default function PayrollPage({ system }: { system: SystemKey }) {
     reload();
   };
 
+  const syncTripPay = async () => {
+    if (!selected || syncingTrips) return;
+    setSyncingTrips(true);
+    try {
+      const trips = await loadTripPay(selected);
+      const extra = (employees ?? []).filter((e) => trips.has(e.id) && !lines.some((l) => l.employee_id === e.id));
+      setLines((cur) => [
+        ...cur.map((l) => ({ ...l, trip_pay: trips.get(l.employee_id)?.fee ?? 0 })),
+        ...extra.map((e) => defaultLine(selected.id, e, selected, trips.get(e.id))),
+      ]);
+      setDirty(true);
+      const count = [...trips.values()].reduce((a, t) => a + t.trips, 0);
+      notify.success(count ? `Trip pay loaded from ${count} trip(s). Review, then Save.` : 'No trips with a staff driver in this period.');
+    } catch (e) {
+      notify.error(e, 'Could not load trip pay');
+    } finally {
+      setSyncingTrips(false);
+    }
+  };
+
   const addEmployee = (e: Employee) => {
     if (!selected) return;
     setLines((cur) => [...cur, defaultLine(selected.id, e, selected)]);
@@ -166,7 +207,7 @@ export default function PayrollPage({ system }: { system: SystemKey }) {
   const missing = (employees ?? []).filter((e) => !lines.some((l) => l.employee_id === e.id));
   const totals = {
     basic: sum(lines, (l) => l.basic_pay), ot: sum(lines, (l) => l.ot_pay), food: sum(lines, (l) => l.food_allowance),
-    other: sum(lines, (l) => l.other_pay), ca: sum(lines, (l) => l.cash_advance), ded: sum(lines, (l) => l.other_deductions),
+    trip: sum(lines, (l) => l.trip_pay), other: sum(lines, (l) => l.other_pay), ca: sum(lines, (l) => l.cash_advance), ded: sum(lines, (l) => l.other_deductions),
     net: lines.reduce((a, l) => a + netOf(l), 0),
   };
   const numCell = 'w-20 rounded border border-slate-200 px-1.5 py-1 text-right text-sm tabular-nums focus:border-primary-500 focus:outline-none disabled:bg-transparent disabled:border-transparent';
@@ -204,6 +245,7 @@ export default function PayrollPage({ system }: { system: SystemKey }) {
                   <p className="text-xs text-slate-500">{locked ? `Paid on ${fmtDate(selected.paid_on)}` : 'Draft — editable'}{selected.notes ? ` · ${selected.notes}` : ''}</p>
                 </div>
                 <div className="flex flex-wrap gap-2">
+                  {!locked && isGrain && <Button size="sm" variant="secondary" icon={<Truck size={15} />} loading={syncingTrips} onClick={syncTripPay} title="Recalculate trip pay from deliveries in this period">Load trip pay</Button>}
                   {!locked && <Button size="sm" variant="secondary" icon={<UserPlus size={15} />} onClick={() => setAddOpen(true)} disabled={!missing.length}>Add employee</Button>}
                   {!locked && <Button size="sm" icon={<Save size={15} />} loading={saving} disabled={!dirty} onClick={saveLines}>Save</Button>}
                   <Button size="sm" variant="secondary" icon={<Printer size={15} />} onClick={() => window.print()} disabled={!lines.length || dirty}>Payslips</Button>
@@ -219,7 +261,7 @@ export default function PayrollPage({ system }: { system: SystemKey }) {
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="bg-slate-50 text-xs text-slate-500 uppercase">
-                        {['Employee', 'Days', 'Basic', 'OT hrs', 'OT pay', 'Food', 'Other pay', 'Cash adv.', 'Other ded.', 'Net pay', 'Remarks', ''].map((h) => (
+                        {['Employee', 'Days', 'Basic', 'OT hrs', 'OT pay', 'Food', ...(isGrain ? ['Trip pay'] : []), 'Other pay', 'Cash adv.', 'Other ded.', 'Net pay', 'Remarks', ''].map((h) => (
                           <th key={h} className={`px-2 py-2.5 font-semibold border-b border-slate-200 whitespace-nowrap ${h === 'Employee' || h === 'Remarks' ? 'text-left' : 'text-right'}`}>{h}</th>
                         ))}
                       </tr>
@@ -233,7 +275,7 @@ export default function PayrollPage({ system }: { system: SystemKey }) {
                               <p className="font-medium">{e?.full_name ?? '—'}</p>
                               <p className="text-[11px] text-slate-400">{e ? `${money(e.rate)}/${e.pay_type === 'daily' ? 'day' : 'mo'} · OT ${money(e.ot_rate_per_hour)}/hr` : ''}</p>
                             </td>
-                            {(['days_worked', 'basic_pay', 'ot_hours', 'ot_pay', 'food_allowance', 'other_pay', 'cash_advance', 'other_deductions'] as const).map((k) => (
+                            {(['days_worked', 'basic_pay', 'ot_hours', 'ot_pay', 'food_allowance', ...(isGrain ? ['trip_pay'] as const : []), 'other_pay', 'cash_advance', 'other_deductions'] as const).map((k) => (
                               <td key={k} className="px-1 py-1.5 text-right">
                                 <input type="number" step="any" disabled={locked} className={numCell} value={l[k]} onChange={(ev) => update(i, k, ev.target.value)} onFocus={(ev) => ev.target.select()} />
                               </td>
@@ -250,6 +292,7 @@ export default function PayrollPage({ system }: { system: SystemKey }) {
                         <td className="px-2">{money(totals.basic)}</td><td />
                         <td className="px-2">{money(totals.ot)}</td>
                         <td className="px-2">{money(totals.food)}</td>
+                        {isGrain && <td className="px-2">{money(totals.trip)}</td>}
                         <td className="px-2">{money(totals.other)}</td>
                         <td className="px-2">{money(totals.ca)}</td>
                         <td className="px-2">{money(totals.ded)}</td>
@@ -258,7 +301,7 @@ export default function PayrollPage({ system }: { system: SystemKey }) {
                       </tr>
                     </tbody>
                   </table>
-                  <p className="text-xs text-slate-400 p-3">Days worked fills Basic (daily-rate staff) and Food allowance automatically; OT hours fills OT pay. You can still type over any amount.</p>
+                  <p className="text-xs text-slate-400 p-3">Days worked fills Basic (daily-rate staff) and Food allowance automatically; OT hours fills OT pay.{isGrain ? ' Trip pay comes from the driver pay on deliveries in this period (use "Load trip pay" after adding trips).' : ''} You can still type over any amount.</p>
                 </div>
               )}
             </>
@@ -288,6 +331,7 @@ export default function PayrollPage({ system }: { system: SystemKey }) {
                     {row('Basic pay', n(l.basic_pay))}
                     {row('Overtime', n(l.ot_pay))}
                     {row('Food allowance', n(l.food_allowance))}
+                    {isGrain && row('Trip pay', n(l.trip_pay))}
                     {row('Other pay', n(l.other_pay))}
                     <div className="flex justify-between font-semibold border-t border-black"><span>Gross</span><span>{money(grossOf(l))}</span></div>
                   </div>
@@ -317,7 +361,7 @@ export default function PayrollPage({ system }: { system: SystemKey }) {
               <Input label="To" type="date" value={newPeriod.period_end} onChange={(e) => setNewPeriod({ ...newPeriod, period_end: e.target.value })} />
             </div>
             <Textarea label="Notes" value={newPeriod.notes} onChange={(e) => setNewPeriod({ ...newPeriod, notes: e.target.value })} />
-            <p className="text-xs text-slate-500">All active personnel are added automatically. Monthly-salaried staff get a full month for periods of 28+ days, otherwise half.</p>
+            <p className="text-xs text-slate-500">All active personnel are added automatically. Monthly-salaried staff get a full month for periods of 28+ days, otherwise half.{isGrain ? ' Drivers get their trip pay for deliveries in these dates.' : ''}</p>
             <div className="flex justify-end gap-2">
               <Button variant="secondary" onClick={() => setNewPeriod(null)}>Cancel</Button>
               <Button onClick={createPeriod} loading={creatingPeriod} disabled={!newPeriod.period_start || !newPeriod.period_end}>Create</Button>

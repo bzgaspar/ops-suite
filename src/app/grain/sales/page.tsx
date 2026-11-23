@@ -1,6 +1,6 @@
 'use client';
 import { useMemo, useState } from 'react';
-import { Plus, Printer, Pencil, Trash2, Wallet } from 'lucide-react';
+import { Plus, Printer, Pencil, Trash2, Wallet, Fuel, Truck } from 'lucide-react';
 import { notify } from '@/lib/notify';
 import { supabaseBrowser } from '@/lib/supabase/client';
 import { useLoad, must } from '@/lib/hooks';
@@ -9,19 +9,23 @@ import { Badge, Button, Card, DateRange, Empty, Input, Modal, PageHeader, Printa
 import { useProfile } from '@/components/layout/AppShell';
 import { useGrainLookups } from '@/components/grain/useGrainLookups';
 import { saleStatus } from '@/components/grain/sale-status';
-import type { Sale, SalePayment } from '@/lib/types';
+import { useFleetLookups, type Driver } from '@/components/grain/fleet';
+import QuickExpense from '@/components/grain/QuickExpense';
+import type { Expense, Sale, SalePayment, Vehicle } from '@/lib/types';
 
 const SEL = '*, grain_commodities(name), grain_buyers(name, company)';
 
 interface Form {
   id?: string; sale_date: string; buyer_id: string; commodity_id: string; sacks: string; gross_kg: string; tare_kg: string;
   deduction_kg: string; price_per_kg: string; hauling_cost: string; truck_plate: string; driver: string; remarks: string;
+  vehicle_id: string; driver_id: string; driver_fee: string;
 }
 
 export default function SalesPage() {
   const me = useProfile();
   const db = supabaseBrowser();
   const { data: lk } = useGrainLookups();
+  const { data: fleet } = useFleetLookups();
   const [from, setFrom] = useState(monthStart());
   const [to, setTo] = useState(monthEnd());
   const [q, setQ] = useState('');
@@ -47,24 +51,40 @@ export default function SalesPage() {
 
   const openNew = () => {
     const c = lk?.commodities.find((x) => x.active);
-    setForm({ sale_date: today(), buyer_id: lk?.buyers.find((b) => b.active)?.id ?? '', commodity_id: c?.id ?? '', sacks: '', gross_kg: '', tare_kg: '', deduction_kg: '', price_per_kg: c ? String(c.sell_price) : '', hauling_cost: '', truck_plate: '', driver: '', remarks: '' });
+    setForm({ sale_date: today(), buyer_id: lk?.buyers.find((b) => b.active)?.id ?? '', commodity_id: c?.id ?? '', sacks: '', gross_kg: '', tare_kg: '', deduction_kg: '', price_per_kg: c ? String(c.sell_price) : '', hauling_cost: '', truck_plate: '', driver: '', remarks: '', vehicle_id: '', driver_id: '', driver_fee: '' });
   };
   const openEdit = (r: Sale) => setForm({
     id: r.id, sale_date: r.sale_date, buyer_id: r.buyer_id, commodity_id: r.commodity_id, sacks: String(r.sacks), gross_kg: String(r.gross_kg),
     tare_kg: String(r.tare_kg), deduction_kg: String(r.deduction_kg), price_per_kg: String(r.price_per_kg), hauling_cost: String(r.hauling_cost),
     truck_plate: r.truck_plate ?? '', driver: r.driver ?? '', remarks: r.remarks ?? '',
+    vehicle_id: r.vehicle_id ?? '', driver_id: r.driver_id ?? '', driver_fee: String(r.driver_fee ?? 0),
   });
+
+  // Picking a vehicle fills its plate and default driver; picking a driver fills their per-trip pay.
+  const pickDriver = (f: Form, id: string): Form => {
+    const d = fleet?.drivers.find((x) => x.id === id);
+    return { ...f, driver_id: id, driver: d?.full_name ?? (id ? f.driver : ''), driver_fee: d ? String(d.trip_rate ?? 0) : id ? f.driver_fee : '' };
+  };
+  const pickVehicle = (f: Form, id: string): Form => {
+    const v = fleet?.vehicles.find((x) => x.id === id);
+    let next: Form = { ...f, vehicle_id: id, truck_plate: v?.plate_no ?? '' };
+    if (v?.default_driver_id && !f.driver_id) next = pickDriver(next, v.default_driver_id);
+    return next;
+  };
 
   const save = async () => {
     if (!form || !calc) return;
     if (!form.buyer_id) return notify.error('Choose a buyer (add one under Big Buyers first)');
     if (calc.net <= 0) return notify.error('Net weight must be more than zero');
     if (!n(form.price_per_kg)) return notify.error('Enter the price per kg');
+    if (n(form.driver_fee) < 0 || n(form.hauling_cost) < 0) return notify.error('Driver pay and trucking cost cannot be negative');
     const values = {
       sale_date: form.sale_date, buyer_id: form.buyer_id, commodity_id: form.commodity_id, sacks: Math.round(n(form.sacks)),
       gross_kg: n(form.gross_kg), tare_kg: n(form.tare_kg), deduction_kg: n(form.deduction_kg), price_per_kg: n(form.price_per_kg),
-      hauling_cost: n(form.hauling_cost), truck_plate: form.truck_plate || null, driver: form.driver || null, remarks: form.remarks || null,
+      hauling_cost: n(form.hauling_cost), truck_plate: form.truck_plate.trim().toUpperCase() || null, driver: form.driver.trim() || null, remarks: form.remarks || null,
+      vehicle_id: form.vehicle_id || null, driver_id: form.driver_id || null, driver_fee: form.driver_id || form.driver.trim() ? n(form.driver_fee) : 0,
     };
+    if (saving) return;
     setSaving(true);
     const res = form.id
       ? await db.from('grain_sales').update(values).eq('id', form.id).select(SEL).single()
@@ -92,7 +112,7 @@ export default function SalesPage() {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
         <Card className="p-3"><p className="text-xs text-slate-500">Net weight sold</p><p className="text-lg font-bold">{kg(sum(rows, (r) => r.net_kg))}</p></Card>
         <Card className="p-3"><p className="text-xs text-slate-500">Sales amount</p><p className="text-lg font-bold">{money(sum(rows, (r) => r.amount))}</p></Card>
-        <Card className="p-3"><p className="text-xs text-slate-500">Hauling cost</p><p className="text-lg font-bold">{money(sum(rows, (r) => r.hauling_cost))}</p></Card>
+        <Card className="p-3"><p className="text-xs text-slate-500">Driver pay + hired trucks</p><p className="text-lg font-bold">{money(sum(rows, (r) => n(r.driver_fee) + n(r.hauling_cost)))}</p></Card>
         <Card className="p-3"><p className="text-xs text-slate-500">To collect</p><p className="text-lg font-bold text-red-600">{money(sum(rows, (r) => saleStatus(r).bal))}</p></Card>
       </div>
 
@@ -165,10 +185,8 @@ export default function SalesPage() {
             </div>
             <div className="grid sm:grid-cols-4 gap-3">
               <Input label="Price / kg (₱)" type="number" step="any" value={form.price_per_kg} onChange={(e) => setForm({ ...form, price_per_kg: e.target.value })} />
-              <Input label="Hauling cost (₱)" type="number" step="any" value={form.hauling_cost} onChange={(e) => setForm({ ...form, hauling_cost: e.target.value })} />
-              <Input label="Truck plate #" value={form.truck_plate} onChange={(e) => setForm({ ...form, truck_plate: e.target.value })} />
-              <Input label="Driver" value={form.driver} onChange={(e) => setForm({ ...form, driver: e.target.value })} />
             </div>
+            <TripFields form={form} setForm={setForm} vehicles={fleet?.vehicles ?? []} drivers={fleet?.drivers ?? []} pickVehicle={pickVehicle} pickDriver={pickDriver} />
             <Textarea label="Remarks" value={form.remarks} onChange={(e) => setForm({ ...form, remarks: e.target.value })} />
             <div className="rounded-xl bg-slate-50 border border-slate-200 p-4 grid grid-cols-2 gap-3">
               <div><p className="text-slate-500 text-xs">Net weight</p><p className="font-bold text-lg">{kg(calc.net)}</p></div>
@@ -191,6 +209,10 @@ function SaleDetail({ sale, onClose, onChanged }: { sale: Sale; onClose: () => v
   const me = useProfile();
   const db = supabaseBrowser();
   const { data: payments, reload } = useLoad(async () => must(await db.from('grain_sale_payments').select('*').eq('sale_id', sale.id).order('paid_on')) as SalePayment[], [sale.id], 'grain:sale-payments');
+  const { data: tripExpenses, reload: reloadTrip } = useLoad(async () =>
+    must(await db.from('grain_expenses').select('*').eq('sale_id', sale.id).order('expense_date')) as Expense[], [sale.id], 'grain:trip-expenses');
+  const { data: fleet } = useFleetLookups();
+  const [addingExpense, setAddingExpense] = useState(false);
   const st = saleStatus(sale);
   const [pay, setPay] = useState({ paid_on: today(), amount: '', method: 'cash', reference: '' });
   const [saving, setSaving] = useState(false);
@@ -212,6 +234,14 @@ function SaleDetail({ sale, onClose, onChanged }: { sale: Sale; onClose: () => v
     refresh();
   };
 
+  const delExpense = async (x: Expense) => {
+    if (!(await ask(`Delete this ${x.category} expense of ${money(x.amount)}?`))) return;
+    const { error } = await db.from('grain_expenses').delete().eq('id', x.id);
+    if (error) return notify.error(error);
+    notify.success('Expense deleted');
+    reloadTrip();
+  };
+
   const delPayment = async (p: SalePayment) => {
     if (!(await ask('Delete this payment?'))) return;
     const { error } = await db.from('grain_sale_payments').delete().eq('id', p.id);
@@ -226,6 +256,30 @@ function SaleDetail({ sale, onClose, onChanged }: { sale: Sale; onClose: () => v
           <DeliveryReceipt s={sale} />
           <Printable><DeliveryReceipt s={sale} /></Printable>
           <Button variant="secondary" className="w-full mt-3" icon={<Printer size={16} />} onClick={() => window.print()}>Print delivery receipt</Button>
+
+          <div className="mt-5">
+            <h3 className="font-semibold flex items-center gap-2 mb-2"><Truck size={16} /> Trip</h3>
+            <div className="text-sm space-y-1 mb-2">
+              <div className="flex justify-between"><span className="text-slate-500">Vehicle</span><span className="font-mono">{sale.truck_plate ?? '—'}{sale.truck_plate && !sale.vehicle_id ? ' (hired)' : ''}</span></div>
+              <div className="flex justify-between"><span className="text-slate-500">Driver</span><span>{sale.driver ?? '—'}</span></div>
+              <div className="flex justify-between"><span className="text-slate-500">Driver trip pay</span><span>{money(sale.driver_fee)}</span></div>
+              {n(sale.hauling_cost) > 0 && <div className="flex justify-between"><span className="text-slate-500">Hired trucking</span><span>{money(sale.hauling_cost)}</span></div>}
+            </div>
+            <div className="divide-y divide-slate-100 border border-slate-200 rounded-lg mb-2">
+              {(tripExpenses ?? []).length === 0 && <p className="text-sm text-slate-400 p-3">No trip expenses (fuel, toll, meals) yet.</p>}
+              {(tripExpenses ?? []).map((x) => (
+                <div key={x.id} className="flex items-center justify-between p-2 text-sm">
+                  <div><p className="font-medium">{money(x.amount)} <span className="font-normal text-slate-500">· {x.category}</span></p><p className="text-xs text-slate-500">{fmtDate(x.expense_date)}{x.description ? ` · ${x.description}` : ''}</p></div>
+                  {me.role !== 'staff' && <button className="p-1 text-red-500 hover:bg-red-50 rounded" onClick={() => delExpense(x)} title="Delete"><Trash2 size={14} /></button>}
+                </div>
+              ))}
+            </div>
+            <div className="flex items-center justify-between text-sm font-semibold mb-2">
+              <span>Total trip cost</span>
+              <span>{money(n(sale.driver_fee) + n(sale.hauling_cost) + sum(tripExpenses ?? [], (x) => x.amount))}</span>
+            </div>
+            <Button variant="secondary" size="sm" className="w-full" icon={<Fuel size={15} />} onClick={() => setAddingExpense(true)}>Add trip expense</Button>
+          </div>
         </div>
         <div>
           <div className="flex items-center justify-between mb-2">
@@ -261,7 +315,45 @@ function SaleDetail({ sale, onClose, onChanged }: { sale: Sale; onClose: () => v
           )}
         </div>
       </div>
+      {addingExpense && (
+        <QuickExpense title={`Trip expense · ${sale.ref_no}`} vehicleId={sale.vehicle_id} saleId={sale.id} vehicles={fleet?.vehicles}
+          defaultDate={sale.sale_date} onClose={() => setAddingExpense(false)} onSaved={reloadTrip} />
+      )}
     </Modal>
+  );
+}
+
+function TripFields({ form, setForm, vehicles, drivers, pickVehicle, pickDriver }: {
+  form: Form; setForm: (f: Form) => void; vehicles: Vehicle[]; drivers: Driver[];
+  pickVehicle: (f: Form, id: string) => Form; pickDriver: (f: Form, id: string) => Form;
+}) {
+  const hasDriver = !!form.driver_id || !!form.driver.trim();
+  return (
+    <div className="rounded-xl border border-slate-200 p-3 space-y-3">
+      <p className="text-sm font-semibold flex items-center gap-2"><Truck size={15} /> Trip</p>
+      <div className="grid sm:grid-cols-2 gap-3">
+        <Select label="Vehicle" value={form.vehicle_id} onChange={(e) => setForm(pickVehicle(form, e.target.value))}>
+          <option value="">Hired / other truck</option>
+          {vehicles.filter((v) => v.active || v.id === form.vehicle_id).map((v) => <option key={v.id} value={v.id}>{v.plate_no}{v.name ? ` · ${v.name}` : ''}</option>)}
+        </Select>
+        {!form.vehicle_id
+          ? <Input label="Plate # (hired truck)" value={form.truck_plate} onChange={(e) => setForm({ ...form, truck_plate: e.target.value })} placeholder="Optional" />
+          : <div className="hidden sm:block" />}
+        <Select label="Driver" value={form.driver_id} onChange={(e) => setForm(pickDriver(form, e.target.value))}>
+          <option value="">Other / not on staff</option>
+          {drivers.filter((d) => d.active || d.id === form.driver_id).map((d) => <option key={d.id} value={d.id}>{d.full_name}{d.position ? ` (${d.position})` : ''}</option>)}
+        </Select>
+        {!form.driver_id
+          ? <Input label="Driver name" value={form.driver} onChange={(e) => setForm({ ...form, driver: e.target.value })} placeholder="Optional" />
+          : <div className="hidden sm:block" />}
+        <Input label="Driver trip pay (₱)" type="number" step="any" value={form.driver_fee} disabled={!hasDriver}
+          onChange={(e) => setForm({ ...form, driver_fee: e.target.value })}
+          hint={form.driver_id ? 'Added to this driver\'s payroll' : 'Pay for this trip, if any'} />
+        <Input label="Hired trucking cost (₱)" type="number" step="any" value={form.hauling_cost}
+          onChange={(e) => setForm({ ...form, hauling_cost: e.target.value })} hint="Only if you paid an outside truck" />
+      </div>
+      {vehicles.length === 0 && <p className="text-xs text-slate-500">Tip: add your trucks under <b>Vehicles</b> to track trips and costs per truck.</p>}
+    </div>
   );
 }
 
