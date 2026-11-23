@@ -2,11 +2,11 @@
 import { useMemo, useState } from 'react';
 import { BellRing, Printer, Download, Trash2 } from 'lucide-react';
 import { addDays, format } from 'date-fns';
-import toast from 'react-hot-toast';
+import { notify } from '@/lib/notify';
 import { supabaseBrowser } from '@/lib/supabase/client';
 import { useLoad, must } from '@/lib/hooks';
 import { fmtDate, money, n, sum } from '@/lib/format';
-import { Badge, Button, Card, DateRange, Empty, Input, Modal, PageHeader, Printable, Select, Spinner, Table, Textarea, td, tdR, th, thR } from '@/components/ui';
+import { Badge, Button, Card, DateRange, Empty, Input, Modal, PageHeader, Printable, Select, Spinner, Table, Textarea, td, tdR, th, thR, ask } from '@/components/ui';
 import { useProfile } from '@/components/layout/AppShell';
 import { loadCustomers, NOTICE_LABEL, NOTICE_TEMPLATES } from '@/components/isp/data';
 import NoticePrint, { fillTemplate } from '@/components/isp/NoticePrint';
@@ -45,8 +45,8 @@ export default function NoticesPage() {
   const changeType = (t: NoticeType) => { setType(t); setTemplate(NOTICE_TEMPLATES[t]); if (t === 'disconnection') setTarget('overdue'); };
 
   const create = async () => {
-    if (!targets.length) return toast.error('No customers match');
-    if (!confirm(`Create ${targets.length} ${NOTICE_LABEL[type]}(s)?`)) return;
+    if (!targets.length) return notify.error('No customers match');
+    if (!(await ask(`Create ${targets.length} ${NOTICE_LABEL[type]}(s)?`))) return;
     setCreating(true);
     const rows = targets.map((c) => {
       const amount = Math.max(n(c.bal.balance), 0);
@@ -54,8 +54,8 @@ export default function NoticesPage() {
     });
     const { data, error } = await db.from('isp_notices').insert(rows).select(SEL);
     setCreating(false);
-    if (error) return toast.error(error.message);
-    toast.success(`${rows.length} notice(s) created`);
+    if (error) return notify.error(error);
+    notify.success(`${rows.length} notice(s) created`);
     reload();
     setToPrint(data as Notice[]);
   };
@@ -73,9 +73,9 @@ export default function NoticesPage() {
   };
 
   const remove = async (nt: Notice) => {
-    if (!confirm('Delete this notice record?')) return;
+    if (!(await ask('Delete this notice record?'))) return;
     const { error } = await db.from('isp_notices').delete().eq('id', nt.id);
-    if (error) return toast.error(error.message);
+    if (error) return notify.error(error);
     reload();
   };
 

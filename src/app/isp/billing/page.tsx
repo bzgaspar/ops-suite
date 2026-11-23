@@ -3,11 +3,11 @@ import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { format, addMonths, parseISO } from 'date-fns';
 import { Zap, Pencil, Trash2, ChevronLeft, ChevronRight } from 'lucide-react';
-import toast from 'react-hot-toast';
+import { notify } from '@/lib/notify';
 import { supabaseBrowser } from '@/lib/supabase/client';
 import { useLoad, must } from '@/lib/hooks';
 import { fmtDate, money, n, sum } from '@/lib/format';
-import { Badge, Button, Card, Empty, Input, Modal, PageHeader, SearchBox, Spinner, StatCard, Table, td, tdR, th, thR } from '@/components/ui';
+import { Badge, Button, Card, Empty, Input, Modal, PageHeader, SearchBox, Spinner, StatCard, Table, td, tdR, th, thR, ask } from '@/components/ui';
 import { useProfile } from '@/components/layout/AppShell';
 import { invoiceStatus } from '@/components/isp/data';
 import type { Invoice } from '@/lib/types';
@@ -40,12 +40,12 @@ export default function BillingPage() {
   }), [data, q, filter]);
 
   const generate = async () => {
-    if (!confirm(`Create ${format(parseISO(month), 'MMMM yyyy')} bills for all ACTIVE customers who don't have one yet?`)) return;
+    if (!(await ask(`Create ${format(parseISO(month), 'MMMM yyyy')} bills for all ACTIVE customers who don't have one yet?`))) return;
     setGenerating(true);
     const { data: count, error } = await db.rpc('isp_generate_monthly_bills', { p_month: month });
     setGenerating(false);
-    if (error) return toast.error(error.message);
-    toast.success(count ? `${count} bill(s) created` : 'Everyone already has a bill for this month');
+    if (error) return notify.error(error);
+    notify.success(count ? `${count} bill(s) created` : 'Everyone already has a bill for this month');
     reload();
   };
 
@@ -54,16 +54,16 @@ export default function BillingPage() {
     const { error } = await db.from('isp_invoices').update({
       amount: n(edit.amount), other_charges: n(edit.other_charges), discount: n(edit.discount), due_date: edit.due_date, description: edit.description || null,
     }).eq('id', edit.inv.id);
-    if (error) return toast.error(error.message);
-    toast.success('Bill updated');
+    if (error) return notify.error(error);
+    notify.success('Bill updated');
     setEdit(null);
     reload();
   };
 
   const remove = async (i: Invoice) => {
-    if (!confirm(`Delete bill ${i.invoice_no}? Payments will be re-applied to other bills.`)) return;
+    if (!(await ask(`Delete bill ${i.invoice_no}? Payments will be re-applied to other bills.`))) return;
     const { error } = await db.from('isp_invoices').delete().eq('id', i.id);
-    if (error) return toast.error(error.message);
+    if (error) return notify.error(error);
     reload();
   };
 

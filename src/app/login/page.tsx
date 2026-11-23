@@ -2,7 +2,8 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Lock, LogIn } from 'lucide-react';
-import toast from 'react-hot-toast';
+import { notify } from '@/lib/notify';
+import { clearLoadCache } from '@/lib/hooks';
 import { supabaseBrowser } from '@/lib/supabase/client';
 import { usernameToEmail } from '@/lib/format';
 import { Button, Input } from '@/components/ui';
@@ -15,23 +16,31 @@ export default function LoginPage() {
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (loading) return;
+    if (!username.trim() || !password) return notify.error('Enter your username and password');
     setLoading(true);
     const supabase = supabaseBrowser();
-    const { data, error } = await supabase.auth.signInWithPassword({ email: usernameToEmail(username), password });
-    if (error || !data.user) {
-      setLoading(false);
-      toast.error('Wrong username or password');
-      return;
+    let ok = false;
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({ email: usernameToEmail(username), password });
+      if (error || !data.user) {
+        const badCreds = error?.code === 'invalid_credentials' || error?.status === 400;
+        return notify.error(badCreds ? 'Wrong username or password' : error ?? 'Could not sign in');
+      }
+      const { data: profile, error: pErr } = await supabase.from('profiles').select('role, system, active').eq('id', data.user.id).maybeSingle();
+      if (pErr || !profile || !profile.active) {
+        await supabase.auth.signOut();
+        return notify.error(pErr ?? (profile ? 'This account is disabled. Contact the admin.' : 'No profile for this account. Contact the admin.'));
+      }
+      clearLoadCache();
+      ok = true;
+      router.replace(profile.role === 'admin' ? '/admin' : `/${profile.system}`);
+      router.refresh();
+    } catch (err) {
+      notify.error(err, 'Could not sign in. Please try again.');
+    } finally {
+      if (!ok) setLoading(false); // keep the spinner while redirecting
     }
-    const { data: profile } = await supabase.from('profiles').select('role, system, active').eq('id', data.user.id).single();
-    if (!profile || !profile.active) {
-      await supabase.auth.signOut();
-      setLoading(false);
-      toast.error(profile ? 'This account is disabled. Contact the admin.' : 'No profile for this account. Contact the admin.');
-      return;
-    }
-    router.replace(profile.role === 'admin' ? '/admin' : `/${profile.system}`);
-    router.refresh();
   };
 
   return (

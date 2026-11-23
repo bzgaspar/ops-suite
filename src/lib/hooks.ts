@@ -1,6 +1,6 @@
 'use client';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import toast from 'react-hot-toast';
+import { notify } from './notify';
 
 // In-memory cache for useLoad (per browser tab). Cleared on sign-out.
 const cache = new Map<string, unknown>();
@@ -29,7 +29,7 @@ export function useLoad<T>(fn: () => Promise<T>, deps: unknown[] = [], key?: str
       if (k) cache.set(k, result);
       if (k === keyRef.current) setData(result); // ignore responses for stale deps
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Failed to load');
+      notify.error(e, 'Could not load data. Please refresh.');
     } finally {
       setLoading(false);
     }
@@ -46,8 +46,8 @@ export function useLoad<T>(fn: () => Promise<T>, deps: unknown[] = [], key?: str
   return { data, loading, reload: reloadLoud, setData };
 }
 
-/** Throw Supabase errors so callers can use try/catch + toast. */
-export function must<T>(res: { data: T | null; error: { message: string } | null }): T {
-  if (res.error) throw new Error(res.error.message);
+/** Throw Supabase errors (keeping code/details so notify can explain them). */
+export function must<T>(res: { data: T | null; error: { message: string; code?: string; details?: string } | null }): T {
+  if (res.error) throw Object.assign(new Error(res.error.message), res.error);
   return res.data as T;
 }

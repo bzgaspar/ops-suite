@@ -1,7 +1,7 @@
 'use client';
 import { useState } from 'react';
 import { Printer } from 'lucide-react';
-import toast from 'react-hot-toast';
+import { notify } from '@/lib/notify';
 import { supabaseBrowser } from '@/lib/supabase/client';
 import { fmtDate, money, n, today } from '@/lib/format';
 import { Button, Input, Modal, Printable, Select, Textarea } from '@/components/ui';
@@ -26,16 +26,16 @@ export default function PaymentModal({ customers, customerId, onClose, onSaved }
   const cust = customers.find((c) => c.id === f.customer_id);
 
   const save = async () => {
-    if (!f.customer_id) return toast.error('Choose a customer');
-    if (!(n(f.amount) > 0)) return toast.error('Enter the amount received');
+    if (!f.customer_id) return notify.error('Choose a customer');
+    if (!(n(f.amount) > 0)) return notify.error('Enter the amount received');
     setSaving(true);
     const { data, error } = await db.from('isp_payments').insert({
       customer_id: f.customer_id, paid_on: f.paid_on, amount: n(f.amount), method: f.method,
       reference: f.reference || null, collector: f.collector || null, notes: f.notes || null,
     }).select('*, isp_customers(full_name, account_no, address)').single();
     setSaving(false);
-    if (error) return toast.error(error.message);
-    toast.success(`Payment recorded — ${(data as Payment).receipt_no}`);
+    if (error) return notify.error(error);
+    notify.success(`Payment recorded — ${(data as Payment).receipt_no}`);
     setSaved(data as Payment);
     onSaved();
   };

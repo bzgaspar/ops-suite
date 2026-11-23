@@ -1,10 +1,10 @@
 'use client';
 import { useState } from 'react';
 import { Plus, Pencil, Trash2, Power } from 'lucide-react';
-import toast from 'react-hot-toast';
+import { notify } from '@/lib/notify';
 import { useLoad } from '@/lib/hooks';
 import { fmtDate } from '@/lib/format';
-import { Badge, Button, Card, Input, Modal, PageHeader, SearchBox, Select, Spinner, Table, td, th } from '@/components/ui';
+import { Badge, Button, Card, Input, Modal, PageHeader, SearchBox, Select, Spinner, Table, td, th, ask } from '@/components/ui';
 import { useProfile } from '@/components/layout/AppShell';
 import type { Profile, Role, SystemKey } from '@/lib/types';
 
@@ -13,7 +13,7 @@ const SYSTEM_LABEL: Record<string, string> = { grain: 'Palay & Corn', isp: 'Inte
 async function api(path: string, method: string, body?: unknown) {
   const res = await fetch(path, { method, headers: { 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined });
   const json = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(json.error ?? 'Request failed');
+  if (!res.ok) throw Object.assign(new Error(json.error ?? `Server error (${res.status}). Please try again.`), { status: res.status });
   return json;
 }
 
@@ -40,15 +40,15 @@ export default function UsersPage() {
         await api(`/api/admin/users/${form.id}`, 'PATCH', {
           full_name: form.full_name, role: form.role, system: form.system || null, password: form.password || undefined,
         });
-        toast.success('User updated');
+        notify.success('User updated');
       } else {
         await api('/api/admin/users', 'POST', { ...form, system: form.system || null });
-        toast.success('User created');
+        notify.success('User created');
       }
       setForm(null);
       reload();
     } catch (e) {
-      toast.error((e as Error).message);
+      notify.error(e);
     } finally {
       setSaving(false);
     }
@@ -57,18 +57,18 @@ export default function UsersPage() {
   const toggle = async (u: Profile) => {
     try {
       await api(`/api/admin/users/${u.id}`, 'PATCH', { active: !u.active });
-      toast.success(u.active ? 'Account disabled' : 'Account enabled');
+      notify.success(u.active ? 'Account disabled' : 'Account enabled');
       reload();
-    } catch (e) { toast.error((e as Error).message); }
+    } catch (e) { notify.error(e); }
   };
 
   const remove = async (u: Profile) => {
-    if (!confirm(`Delete ${u.full_name} (${u.username}) permanently?`)) return;
+    if (!(await ask(`Delete ${u.full_name} (${u.username}) permanently?`))) return;
     try {
       await api(`/api/admin/users/${u.id}`, 'DELETE');
-      toast.success('User deleted');
+      notify.success('User deleted');
       reload();
-    } catch (e) { toast.error((e as Error).message); }
+    } catch (e) { notify.error(e); }
   };
 
   return (

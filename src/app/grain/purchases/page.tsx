@@ -1,11 +1,11 @@
 'use client';
 import { useMemo, useState } from 'react';
 import { Plus, Printer, Pencil, Trash2, CheckCircle2 } from 'lucide-react';
-import toast from 'react-hot-toast';
+import { notify } from '@/lib/notify';
 import { supabaseBrowser } from '@/lib/supabase/client';
 import { useLoad, must } from '@/lib/hooks';
 import { fmtDate, kg, money, monthEnd, monthStart, n, round2, sum, today, qty } from '@/lib/format';
-import { Badge, Button, Card, DateRange, Empty, Input, Modal, PageHeader, Printable, SearchBox, Select, Spinner, Table, Textarea, td, tdR, th, thR } from '@/components/ui';
+import { Badge, Button, Card, DateRange, Empty, Input, Modal, PageHeader, Printable, SearchBox, Select, Spinner, Table, Textarea, td, tdR, th, thR, ask } from '@/components/ui';
 import { useProfile } from '@/components/layout/AppShell';
 import { useGrainLookups, moistureShrinkKg } from '@/components/grain/useGrainLookups';
 import type { Purchase } from '@/lib/types';
@@ -77,10 +77,10 @@ export default function PurchasesPage() {
 
   const save = async () => {
     if (!form || !calc) return;
-    if (!form.seller_name.trim()) return toast.error('Choose a farmer or type the seller name');
-    if (!form.commodity_id) return toast.error('Choose a commodity');
-    if (calc.net <= 0) return toast.error('Net weight must be more than zero');
-    if (!n(form.price_per_kg)) return toast.error('Enter the price per kg');
+    if (!form.seller_name.trim()) return notify.error('Choose a farmer or type the seller name');
+    if (!form.commodity_id) return notify.error('Choose a commodity');
+    if (calc.net <= 0) return notify.error('Net weight must be more than zero');
+    if (!n(form.price_per_kg)) return notify.error('Enter the price per kg');
     const values = {
       purchase_date: form.purchase_date, farmer_id: form.farmer_id || null, seller_name: form.seller_name.trim(), commodity_id: form.commodity_id,
       sacks: Math.round(n(form.sacks)), gross_kg: n(form.gross_kg), tare_kg: n(form.tare_kg),
@@ -92,8 +92,8 @@ export default function PurchasesPage() {
       ? await db.from('grain_purchases').update(values).eq('id', form.id).select('*, grain_commodities(name)').single()
       : await db.from('grain_purchases').insert(values).select('*, grain_commodities(name)').single();
     setSaving(false);
-    if (res.error) return toast.error(res.error.message);
-    toast.success(`Saved ${(res.data as Purchase).ref_no}`);
+    if (res.error) return notify.error(res.error);
+    notify.success(`Saved ${(res.data as Purchase).ref_no}`);
     setForm(null);
     setReceipt(res.data as Purchase);
     reload();
@@ -101,14 +101,14 @@ export default function PurchasesPage() {
 
   const markPaid = async (r: Purchase) => {
     const { error } = await db.from('grain_purchases').update({ payment_status: 'paid' }).eq('id', r.id);
-    if (error) return toast.error(error.message);
+    if (error) return notify.error(error);
     reload();
   };
 
   const remove = async (r: Purchase) => {
-    if (!confirm(`Delete purchase ${r.ref_no}? Stock will be reduced.`)) return;
+    if (!(await ask(`Delete purchase ${r.ref_no}? Stock will be reduced.`))) return;
     const { error } = await db.from('grain_purchases').delete().eq('id', r.id);
-    if (error) return toast.error(error.message);
+    if (error) return notify.error(error);
     reload();
   };
 

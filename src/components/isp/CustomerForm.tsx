@@ -1,6 +1,7 @@
 'use client';
 import { useState } from 'react';
-import toast from 'react-hot-toast';
+import { notify } from '@/lib/notify';
+import { friendlyError } from '@/lib/errors';
 import { supabaseBrowser } from '@/lib/supabase/client';
 import { useLoad, must } from '@/lib/hooks';
 import { n, today } from '@/lib/format';
@@ -32,9 +33,9 @@ export default function CustomerForm({ customer, onClose, onSaved }: { customer?
   });
 
   const save = async () => {
-    if (!f.full_name.trim()) return toast.error('Name is required');
+    if (!f.full_name.trim()) return notify.error('Name is required');
     const day = Math.round(n(f.billing_day));
-    if (day < 1 || day > 28) return toast.error('Billing day must be 1–28');
+    if (day < 1 || day > 28) return notify.error('Billing day must be 1–28');
     const values = {
       full_name: f.full_name.trim(), phone: f.phone || null, email: f.email || null, address: f.address || null, area: f.area || null,
       plan_id: f.plan_id || null, monthly_fee: n(f.monthly_fee), install_date: f.install_date || null, billing_day: day,
@@ -44,16 +45,16 @@ export default function CustomerForm({ customer, onClose, onSaved }: { customer?
     const res = customer
       ? await db.from('isp_customers').update(values).eq('id', customer.id).select('id').single()
       : await db.from('isp_customers').insert(values).select('id').single();
-    if (res.error) { setSaving(false); return toast.error(res.error.message); }
+    if (res.error) { setSaving(false); return notify.error(res.error); }
     const id = (res.data as { id: string }).id;
     if (!customer && n(f.install_fee) > 0) {
       const { error } = await db.from('isp_invoices').insert({
         customer_id: id, kind: 'installation', description: 'Installation fee', amount: n(f.install_fee), due_date: f.install_date || today(),
       });
-      if (error) toast.error(`Customer saved, but installation fee failed: ${error.message}`);
+      if (error) notify.error(`Customer saved, but the installation fee was not added: ${friendlyError(error)}`);
     }
     setSaving(false);
-    toast.success('Customer saved');
+    notify.success('Customer saved');
     onSaved(id);
   };
 

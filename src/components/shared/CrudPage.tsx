@@ -1,10 +1,10 @@
 'use client';
 import { useMemo, useState } from 'react';
 import { Plus, Pencil, Trash2 } from 'lucide-react';
-import toast from 'react-hot-toast';
+import { notify } from '@/lib/notify';
 import { supabaseBrowser } from '@/lib/supabase/client';
 import { useLoad, must } from '@/lib/hooks';
-import { Button, Card, Empty, Input, Modal, PageHeader, SearchBox, Select, Spinner, Table, Textarea, td, tdR, th, thR } from '@/components/ui';
+import { Button, Card, Empty, Input, Modal, PageHeader, SearchBox, Select, Spinner, Table, Textarea, td, tdR, th, thR, ask } from '@/components/ui';
 import { useProfile } from '@/components/layout/AppShell';
 
 export interface CrudField {
@@ -65,7 +65,7 @@ export default function CrudPage<T extends { id: string }>(p: Props<T>) {
   const save = async () => {
     if (!editing) return;
     for (const f of p.fields) {
-      if (f.required && (editing[f.key] === '' || editing[f.key] == null)) return toast.error(`${f.label} is required`);
+      if (f.required && (editing[f.key] === '' || editing[f.key] == null)) return notify.error(`${f.label} is required`);
     }
     let values: Record<string, unknown> = {};
     for (const f of p.fields) {
@@ -78,17 +78,17 @@ export default function CrudPage<T extends { id: string }>(p: Props<T>) {
       ? await db.from(p.table).update(values).eq('id', editing.id as string)
       : await db.from(p.table).insert(values);
     setSaving(false);
-    if (res.error) return toast.error(res.error.message);
-    toast.success('Saved');
+    if (res.error) return notify.error(res.error);
+    notify.success('Saved');
     setEditing(null);
     reload();
   };
 
   const remove = async (row: T) => {
-    if (!confirm('Delete this record? This cannot be undone.')) return;
+    if (!(await ask('Delete this record? This cannot be undone.'))) return;
     const { error } = await db.from(p.table).delete().eq('id', row.id);
-    if (error) return toast.error(error.message.includes('foreign key') ? 'This record is used by other records. Mark it inactive instead.' : error.message);
-    toast.success('Deleted');
+    if (error) return notify.error(error);
+    notify.success('Deleted');
     reload();
   };
 

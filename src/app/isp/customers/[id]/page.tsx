@@ -3,11 +3,11 @@ import { use, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, Pencil, Wallet, FilePlus2, BellRing, Printer, Trash2, Power, PauseCircle, PlayCircle } from 'lucide-react';
-import toast from 'react-hot-toast';
+import { notify } from '@/lib/notify';
 import { supabaseBrowser } from '@/lib/supabase/client';
 import { useLoad, must } from '@/lib/hooks';
 import { fmtDate, money, n, today } from '@/lib/format';
-import { Badge, Button, Card, Input, Modal, PageHeader, Printable, Select, Spinner, Table, Textarea, td, tdR, th, thR } from '@/components/ui';
+import { Badge, Button, Card, Input, Modal, PageHeader, Printable, Select, Spinner, Table, Textarea, td, tdR, th, thR, ask } from '@/components/ui';
 import { useProfile } from '@/components/layout/AppShell';
 import { loadCustomers, invoiceStatus, STATUS_TONE, NOTICE_TEMPLATES, NOTICE_LABEL } from '@/components/isp/data';
 import CustomerForm from '@/components/isp/CustomerForm';
@@ -55,26 +55,26 @@ export default function CustomerDetail({ params }: { params: Promise<{ id: strin
   const bal = n(c.bal.balance);
 
   const setStatus = async (status: string) => {
-    if (!confirm(`Change status to ${status.toUpperCase()}?`)) return;
+    if (!(await ask(`Change status to ${status.toUpperCase()}?`))) return;
     const { error } = await db.from('isp_customers').update({ status }).eq('id', id);
-    if (error) return toast.error(error.message);
-    toast.success(`Customer ${status}`);
+    if (error) return notify.error(error);
+    notify.success(`Customer ${status}`);
     reload();
   };
 
   const saveCharge = async () => {
-    if (!charge || !(n(charge.amount) > 0)) return toast.error('Enter an amount');
+    if (!charge || !(n(charge.amount) > 0)) return notify.error('Enter an amount');
     const { error } = await db.from('isp_invoices').insert({ customer_id: id, kind: charge.kind, description: charge.description || null, amount: n(charge.amount), due_date: charge.due_date });
-    if (error) return toast.error(error.message);
-    toast.success('Charge added');
+    if (error) return notify.error(error);
+    notify.success('Charge added');
     setCharge(null);
     reload();
   };
 
   const deleteEntry = async (e: Entry) => {
-    if (!confirm(`Delete ${e.ref}? Balances will be recalculated.`)) return;
+    if (!(await ask(`Delete ${e.ref}? Balances will be recalculated.`))) return;
     const { error } = await db.from(e.kind === 'bill' ? 'isp_invoices' : 'isp_payments').delete().eq('id', e.id);
-    if (error) return toast.error(error.message);
+    if (error) return notify.error(error);
     reload();
   };
 
@@ -87,16 +87,16 @@ export default function CustomerDetail({ params }: { params: Promise<{ id: strin
     if (!notice) return;
     const { data, error } = await db.from('isp_notices').insert({ customer_id: id, notice_type: notice.notice_type, due_date: notice.due_date || null, amount_due: Math.max(bal, 0), message: notice.message })
       .select('*, isp_customers(full_name, account_no, address, area)').single();
-    if (error) return toast.error(error.message);
+    if (error) return notify.error(error);
     setNotice(null);
     reloadLedger();
     setPrinting({ kind: 'notice', n: data as Notice });
   };
 
   const deleteCustomer = async () => {
-    if (!confirm(`Permanently delete ${c.full_name} and ALL their bills and payments? Consider "Disconnect" instead.`)) return;
+    if (!(await ask(`Permanently delete ${c.full_name} and ALL their bills and payments? Consider "Disconnect" instead.`))) return;
     const { error } = await db.from('isp_customers').delete().eq('id', id);
-    if (error) return toast.error(error.message);
+    if (error) return notify.error(error);
     router.push('/isp/customers');
   };
 

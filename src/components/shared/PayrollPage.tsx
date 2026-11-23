@@ -2,11 +2,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Plus, Printer, Save, CheckCircle2, RotateCcw, Trash2, UserPlus } from 'lucide-react';
 import { differenceInCalendarDays, parseISO } from 'date-fns';
-import toast from 'react-hot-toast';
+import { notify } from '@/lib/notify';
 import { supabaseBrowser } from '@/lib/supabase/client';
 import { useLoad, must } from '@/lib/hooks';
 import { fmtDate, money, n, round2, sum, today } from '@/lib/format';
-import { Badge, Button, Card, Empty, Input, Modal, PageHeader, Printable, Spinner, Textarea } from '@/components/ui';
+import { Badge, Button, Card, Empty, Input, Modal, PageHeader, Printable, Spinner, Textarea, ask } from '@/components/ui';
 import { useProfile } from '@/components/layout/AppShell';
 import type { Employee, PayrollLine, PayrollPeriod, SystemKey } from '@/lib/types';
 
@@ -48,6 +48,7 @@ export default function PayrollPage({ system }: { system: SystemKey }) {
   const [linesLoading, setLinesLoading] = useState(false);
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [creatingPeriod, setCreatingPeriod] = useState(false);
   const [newPeriod, setNewPeriod] = useState<{ period_start: string; period_end: string; notes: string } | null>(null);
   const [addOpen, setAddOpen] = useState(false);
 
@@ -64,26 +65,39 @@ export default function PayrollPage({ system }: { system: SystemKey }) {
     setLinesLoading(true);
     db.from(T.lines).select('*').eq('period_id', selectedId).then(({ data, error }) => {
       setLinesLoading(false);
-      if (error) return toast.error(error.message);
+      if (error) return notify.error(error);
       setLines((data as PayrollLine[]).map(({ gross_pay: _g, net_pay: _n, ...l }) => l));
       setDirty(false);
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedId]);
 
+  // Warn before closing/reloading the tab with unsaved payroll edits.
+  useEffect(() => {
+    if (!dirty) return;
+    const warn = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = ''; };
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, [dirty]);
+
   if (me.role === 'staff') return <Card className="p-8 text-center text-slate-500">Payroll is for managers only.</Card>;
 
   const createPeriod = async () => {
-    if (!newPeriod) return;
+    if (!newPeriod || creatingPeriod) return;
+    if (newPeriod.period_end < newPeriod.period_start) return notify.error('End date must be on or after the start date');
+    setCreatingPeriod(true);
+    try { await doCreatePeriod(newPeriod); } finally { setCreatingPeriod(false); }
+  };
+  const doCreatePeriod = async (newPeriod: { period_start: string; period_end: string; notes: string }) => {
     const { data, error } = await db.from(T.periods).insert({ period_start: newPeriod.period_start, period_end: newPeriod.period_end, notes: newPeriod.notes || null }).select().single();
-    if (error) return toast.error(error.message);
+    if (error) return notify.error(error);
     const period = data as PayrollPeriod;
     const active = (employees ?? []).filter((e) => e.active);
     if (active.length) {
       const { error: lErr } = await db.from(T.lines).insert(active.map((e) => defaultLine(period.id, e, period)));
-      if (lErr) toast.error(lErr.message);
+      if (lErr) notify.error(lErr);
     }
-    toast.success(`Payroll created with ${active.length} employee(s). Enter days worked and overtime.`);
+    notify.success(`Payroll created with ${active.length} employee(s). Enter days worked and overtime.`);
     setNewPeriod(null);
     setSelectedId(period.id);
     reload();
@@ -109,25 +123,25 @@ export default function PayrollPage({ system }: { system: SystemKey }) {
     const payload = lines.map(({ id: _id, ...l }) => l);
     const { error } = await db.from(T.lines).upsert(payload, { onConflict: 'period_id,employee_id' });
     setSaving(false);
-    if (error) return toast.error(error.message);
-    toast.success('Payroll saved');
+    if (error) return notify.error(error);
+    notify.success('Payroll saved');
     setDirty(false);
     reload();
   };
 
   const setStatus = async (status: 'paid' | 'draft') => {
     if (!selected) return;
-    if (dirty) return toast.error('Save your changes first');
-    if (status === 'paid' && !confirm('Mark this payroll as PAID? It will be locked from editing.')) return;
+    if (dirty) return notify.error('Save your changes first');
+    if (status === 'paid' && !(await ask('Mark this payroll as PAID? It will be locked from editing.'))) return;
     const { error } = await db.from(T.periods).update({ status, paid_on: status === 'paid' ? today() : null }).eq('id', selected.id);
-    if (error) return toast.error(error.message);
+    if (error) return notify.error(error);
     reload();
   };
 
   const deletePeriod = async () => {
-    if (!selected || !confirm('Delete this whole payroll period and all its lines?')) return;
+    if (!selected || !(await ask('Delete this whole payroll period and all its lines?'))) return;
     const { error } = await db.from(T.periods).delete().eq('id', selected.id);
-    if (error) return toast.error(error.message);
+    if (error) return notify.error(error);
     setSelectedId(null);
     reload();
   };
@@ -136,7 +150,7 @@ export default function PayrollPage({ system }: { system: SystemKey }) {
     const l = lines[idx];
     if (l.id) {
       const { error } = await db.from(T.lines).delete().eq('id', l.id);
-      if (error) return toast.error(error.message);
+      if (error) return notify.error(error);
     }
     setLines((cur) => cur.filter((_, i) => i !== idx));
     reload();
@@ -168,7 +182,7 @@ export default function PayrollPage({ system }: { system: SystemKey }) {
           {loading ? <Spinner /> : !periods?.length ? <Empty text="No payroll yet." /> : (
             <div className="max-h-[60vh] overflow-y-auto divide-y divide-slate-100">
               {periods.map((p) => (
-                <button key={p.id} onClick={() => setSelectedId(p.id)}
+                <button key={p.id} onClick={async () => { if (p.id !== selectedId && dirty && !(await ask('You have unsaved payroll changes. Discard them?', { confirmLabel: 'Discard', danger: true }))) return; setSelectedId(p.id); }}
                   className={`w-full text-left px-4 py-3 hover:bg-slate-50 ${p.id === selectedId ? 'bg-primary-50' : ''}`}>
                   <div className="flex justify-between items-center">
                     <span className="text-sm font-medium">{fmtDate(p.period_start, 'MMM d')} – {fmtDate(p.period_end, 'MMM d, yyyy')}</span>
@@ -306,7 +320,7 @@ export default function PayrollPage({ system }: { system: SystemKey }) {
             <p className="text-xs text-slate-500">All active personnel are added automatically. Monthly-salaried staff get a full month for periods of 28+ days, otherwise half.</p>
             <div className="flex justify-end gap-2">
               <Button variant="secondary" onClick={() => setNewPeriod(null)}>Cancel</Button>
-              <Button onClick={createPeriod} disabled={!newPeriod.period_start || !newPeriod.period_end}>Create</Button>
+              <Button onClick={createPeriod} loading={creatingPeriod} disabled={!newPeriod.period_start || !newPeriod.period_end}>Create</Button>
             </div>
           </div>
         )}

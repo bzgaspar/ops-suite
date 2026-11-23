@@ -1,10 +1,10 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase/server';
-import { requireAdminApi, validateRoleSystem, bad } from '@/lib/admin-api';
+import { requireAdminApi, validateRoleSystem, bad, withErrors } from '@/lib/admin-api';
 
 type Ctx = { params: Promise<{ id: string }> };
 
-export async function PATCH(req: Request, { params }: Ctx) {
+export const PATCH = withErrors(async (req: Request, { params }: Ctx) => {
   const me = await requireAdminApi();
   if (me instanceof NextResponse) return me;
   const { id } = await params;
@@ -41,9 +41,9 @@ export async function PATCH(req: Request, { params }: Ctx) {
     if (error) return bad(error.message, 500);
   }
   return NextResponse.json({ ok: true });
-}
+});
 
-export async function DELETE(_req: Request, { params }: Ctx) {
+export const DELETE = withErrors(async (_req: Request, { params }: Ctx) => {
   const me = await requireAdminApi();
   if (me instanceof NextResponse) return me;
   const { id } = await params;
@@ -51,4 +51,4 @@ export async function DELETE(_req: Request, { params }: Ctx) {
   const { error } = await supabaseAdmin().auth.admin.deleteUser(id);
   if (error) return bad(error.message, 500);
   return NextResponse.json({ ok: true });
-}
+});

@@ -44,6 +44,16 @@ Stack: Next.js 15 (App Router) · Supabase (Auth + Postgres + RLS) · Tailwind C
 ### Deploying (Vercel)
 Add the same three env vars in Vercel → Project → Settings → Environment Variables, then deploy.
 
+### Updating the database
+
+`supabase/schema.sql` is safe to re-run. After pulling changes that touch it, run the whole file again in the SQL Editor. Your data is kept.
+
+### Keeping it fast
+
+- **Use asymmetric JWT signing keys.** Supabase → Project Settings → JWT Keys → migrate to the new signing keys. The app checks logins locally with them; on the legacy secret every page load makes an extra call to Supabase Auth.
+- **Put Supabase and the app in the same region, close to your users.** For the Philippines, use Singapore (`ap-southeast-1`) for the Supabase project and `sin1` for Vercel functions. Every query crosses this distance.
+- **Judge speed in production mode.** `npm run dev` compiles pages on first visit. Use `npm run build && npm start` to see real speed.
+
 ---
 
 ## Roles

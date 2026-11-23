@@ -6,6 +6,7 @@ interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   size?: 'sm' | 'md' | 'lg';
   loading?: boolean;
   icon?: React.ReactNode;
+  ref?: React.Ref<HTMLButtonElement>;
 }
 
 export default function Button({

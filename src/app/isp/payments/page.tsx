@@ -2,11 +2,11 @@
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { Plus, Printer, Trash2 } from 'lucide-react';
-import toast from 'react-hot-toast';
+import { notify } from '@/lib/notify';
 import { supabaseBrowser } from '@/lib/supabase/client';
 import { useLoad, must } from '@/lib/hooks';
 import { fmtDate, money, n, sum, today } from '@/lib/format';
-import { Button, Card, DateRange, Empty, Modal, PageHeader, Printable, SearchBox, Spinner, Table, td, tdR, th, thR } from '@/components/ui';
+import { Button, Card, DateRange, Empty, Modal, PageHeader, Printable, SearchBox, Spinner, Table, td, tdR, th, thR, ask } from '@/components/ui';
 import { useProfile } from '@/components/layout/AppShell';
 import { loadCustomers } from '@/components/isp/data';
 import PaymentModal, { OfficialReceipt } from '@/components/isp/PaymentModal';
@@ -30,9 +30,9 @@ export default function PaymentsPage() {
   const byMethod = groupSum(rows, (p) => p.method, { amt: (p) => n(p.amount) });
 
   const remove = async (p: Payment) => {
-    if (!confirm(`Void/delete payment ${p.receipt_no} (${money(p.amount)})? The customer's balance will go back up.`)) return;
+    if (!(await ask(`Void/delete payment ${p.receipt_no} (${money(p.amount)})? The customer's balance will go back up.`))) return;
     const { error } = await db.from('isp_payments').delete().eq('id', p.id);
-    if (error) return toast.error(error.message);
+    if (error) return notify.error(error);
     reload(); reloadCustomers();
   };
 

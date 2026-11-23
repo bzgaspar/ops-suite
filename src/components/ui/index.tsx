@@ -4,6 +4,7 @@ export { default as Button } from './Button';
 export { default as Modal } from './Modal';
 export { Input, Select, Textarea, Field, inputCls } from './Field';
 export { default as Printable } from './Printable';
+export { ask } from './Confirm';
 
 export function Card({ className = '', children }: { className?: string; children: React.ReactNode }) {
   return <div className={`bg-white rounded-xl border border-slate-200 shadow-sm ${className}`}>{children}</div>;

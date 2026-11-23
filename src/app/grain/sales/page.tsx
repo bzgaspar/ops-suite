@@ -1,11 +1,11 @@
 'use client';
 import { useMemo, useState } from 'react';
 import { Plus, Printer, Pencil, Trash2, Wallet } from 'lucide-react';
-import toast from 'react-hot-toast';
+import { notify } from '@/lib/notify';
 import { supabaseBrowser } from '@/lib/supabase/client';
 import { useLoad, must } from '@/lib/hooks';
 import { fmtDate, kg, money, monthEnd, monthStart, n, qty, round2, sum, today } from '@/lib/format';
-import { Badge, Button, Card, DateRange, Empty, Input, Modal, PageHeader, Printable, SearchBox, Select, Spinner, Table, Textarea, td, tdR, th, thR } from '@/components/ui';
+import { Badge, Button, Card, DateRange, Empty, Input, Modal, PageHeader, Printable, SearchBox, Select, Spinner, Table, Textarea, td, tdR, th, thR, ask } from '@/components/ui';
 import { useProfile } from '@/components/layout/AppShell';
 import { useGrainLookups } from '@/components/grain/useGrainLookups';
 import { saleStatus } from '@/components/grain/sale-status';
@@ -57,9 +57,9 @@ export default function SalesPage() {
 
   const save = async () => {
     if (!form || !calc) return;
-    if (!form.buyer_id) return toast.error('Choose a buyer (add one under Big Buyers first)');
-    if (calc.net <= 0) return toast.error('Net weight must be more than zero');
-    if (!n(form.price_per_kg)) return toast.error('Enter the price per kg');
+    if (!form.buyer_id) return notify.error('Choose a buyer (add one under Big Buyers first)');
+    if (calc.net <= 0) return notify.error('Net weight must be more than zero');
+    if (!n(form.price_per_kg)) return notify.error('Enter the price per kg');
     const values = {
       sale_date: form.sale_date, buyer_id: form.buyer_id, commodity_id: form.commodity_id, sacks: Math.round(n(form.sacks)),
       gross_kg: n(form.gross_kg), tare_kg: n(form.tare_kg), deduction_kg: n(form.deduction_kg), price_per_kg: n(form.price_per_kg),
@@ -70,17 +70,17 @@ export default function SalesPage() {
       ? await db.from('grain_sales').update(values).eq('id', form.id).select(SEL).single()
       : await db.from('grain_sales').insert(values).select(SEL).single();
     setSaving(false);
-    if (res.error) return toast.error(res.error.message);
-    toast.success(`Saved ${(res.data as Sale).ref_no}`);
+    if (res.error) return notify.error(res.error);
+    notify.success(`Saved ${(res.data as Sale).ref_no}`);
     setForm(null);
     setDetail(res.data as Sale);
     reload();
   };
 
   const remove = async (r: Sale) => {
-    if (!confirm(`Delete sale ${r.ref_no} and its payments? Stock will be restored.`)) return;
+    if (!(await ask(`Delete sale ${r.ref_no} and its payments? Stock will be restored.`))) return;
     const { error } = await db.from('grain_sales').delete().eq('id', r.id);
-    if (error) return toast.error(error.message);
+    if (error) return notify.error(error);
     reload();
   };
 
@@ -202,20 +202,20 @@ function SaleDetail({ sale, onClose, onChanged }: { sale: Sale; onClose: () => v
   };
 
   const addPayment = async () => {
-    if (!n(pay.amount)) return toast.error('Enter an amount');
+    if (!n(pay.amount)) return notify.error('Enter an amount');
     setSaving(true);
     const { error } = await db.from('grain_sale_payments').insert({ sale_id: sale.id, paid_on: pay.paid_on, amount: n(pay.amount), method: pay.method, reference: pay.reference || null });
     setSaving(false);
-    if (error) return toast.error(error.message);
-    toast.success('Payment recorded');
+    if (error) return notify.error(error);
+    notify.success('Payment recorded');
     setPay({ ...pay, amount: '', reference: '' });
     refresh();
   };
 
   const delPayment = async (p: SalePayment) => {
-    if (!confirm('Delete this payment?')) return;
+    if (!(await ask('Delete this payment?'))) return;
     const { error } = await db.from('grain_sale_payments').delete().eq('id', p.id);
-    if (error) return toast.error(error.message);
+    if (error) return notify.error(error);
     refresh();
   };
 

@@ -1,17 +1,17 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase/server';
-import { requireAdminApi, validateRoleSystem, bad } from '@/lib/admin-api';
+import { requireAdminApi, validateRoleSystem, bad, withErrors } from '@/lib/admin-api';
 import { usernameToEmail } from '@/lib/format';
 
-export async function GET() {
+export const GET = withErrors(async () => {
   const me = await requireAdminApi();
   if (me instanceof NextResponse) return me;
   const { data, error } = await supabaseAdmin().from('profiles').select('*').order('created_at');
   if (error) return bad(error.message, 500);
   return NextResponse.json(data);
-}
+});
 
-export async function POST(req: Request) {
+export const POST = withErrors(async (req: Request) => {
   const me = await requireAdminApi();
   if (me instanceof NextResponse) return me;
 
@@ -40,4 +40,4 @@ export async function POST(req: Request) {
     return bad(pErr.message.includes('duplicate') ? 'Username already taken' : pErr.message);
   }
   return NextResponse.json({ ok: true });
-}
+});

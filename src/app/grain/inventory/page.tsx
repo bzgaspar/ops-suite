@@ -1,11 +1,11 @@
 'use client';
 import { useState } from 'react';
 import { Plus, Trash2 } from 'lucide-react';
-import toast from 'react-hot-toast';
+import { notify } from '@/lib/notify';
 import { supabaseBrowser } from '@/lib/supabase/client';
 import { useLoad, must } from '@/lib/hooks';
 import { fmtDate, kg, money, n, sum, today } from '@/lib/format';
-import { Button, Card, Empty, Input, Modal, PageHeader, Select, Spinner, Table, td, tdR, th, thR } from '@/components/ui';
+import { Button, Card, Empty, Input, Modal, PageHeader, Select, Spinner, Table, td, tdR, th, thR, ask } from '@/components/ui';
 import { useProfile } from '@/components/layout/AppShell';
 import type { InventoryRow, StockAdjustment } from '@/lib/types';
 
@@ -22,20 +22,20 @@ export default function InventoryPage() {
   const [form, setForm] = useState<{ adj_date: string; commodity_id: string; direction: '-' | '+'; kg: string; reason: string } | null>(null);
 
   const save = async () => {
-    if (!form || !n(form.kg) || !form.reason.trim()) return toast.error('Enter kg and reason');
+    if (!form || !n(form.kg) || !form.reason.trim()) return notify.error('Enter kg and reason');
     const { error } = await db.from('grain_stock_adjustments').insert({
       adj_date: form.adj_date, commodity_id: form.commodity_id, kg: (form.direction === '-' ? -1 : 1) * Math.abs(n(form.kg)), reason: form.reason.trim(),
     });
-    if (error) return toast.error(error.message);
-    toast.success('Adjustment saved');
+    if (error) return notify.error(error);
+    notify.success('Adjustment saved');
     setForm(null);
     reload();
   };
 
   const remove = async (a: StockAdjustment) => {
-    if (!confirm('Delete this adjustment?')) return;
+    if (!(await ask('Delete this adjustment?'))) return;
     const { error } = await db.from('grain_stock_adjustments').delete().eq('id', a.id);
-    if (error) return toast.error(error.message);
+    if (error) return notify.error(error);
     reload();
   };
 

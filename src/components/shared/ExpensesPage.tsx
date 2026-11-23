@@ -1,11 +1,11 @@
 'use client';
 import { useMemo, useState } from 'react';
 import { Plus, Pencil, Trash2 } from 'lucide-react';
-import toast from 'react-hot-toast';
+import { notify } from '@/lib/notify';
 import { supabaseBrowser } from '@/lib/supabase/client';
 import { useLoad, must } from '@/lib/hooks';
 import { fmtDate, money, monthEnd, monthStart, n, sum, today } from '@/lib/format';
-import { Button, Card, DateRange, Empty, Input, Modal, PageHeader, Select, Spinner, Table, Textarea, td, tdR, th, thR } from '@/components/ui';
+import { Button, Card, DateRange, Empty, Input, Modal, PageHeader, Select, Spinner, Table, Textarea, td, tdR, th, thR, ask } from '@/components/ui';
 import { useProfile } from '@/components/layout/AppShell';
 import type { Expense, SystemKey } from '@/lib/types';
 
@@ -39,7 +39,7 @@ export default function ExpensesPage({ system }: { system: SystemKey }) {
 
   const save = async () => {
     if (!form) return;
-    if (!form.category || !n(form.amount)) return toast.error('Category and amount are required');
+    if (!form.category || !n(form.amount)) return notify.error('Category and amount are required');
     const values = {
       expense_date: form.expense_date, category: form.category, description: form.description || null,
       amount: n(form.amount), paid_to: form.paid_to || null, reference: form.reference || null,
@@ -47,16 +47,16 @@ export default function ExpensesPage({ system }: { system: SystemKey }) {
     setSaving(true);
     const res = form.id ? await db.from(table).update(values).eq('id', form.id) : await db.from(table).insert(values);
     setSaving(false);
-    if (res.error) return toast.error(res.error.message);
-    toast.success('Expense saved');
+    if (res.error) return notify.error(res.error);
+    notify.success('Expense saved');
     setForm(null);
     reload();
   };
 
   const remove = async (r: Expense) => {
-    if (!confirm('Delete this expense?')) return;
+    if (!(await ask('Delete this expense?'))) return;
     const { error } = await db.from(table).delete().eq('id', r.id);
-    if (error) return toast.error(error.message);
+    if (error) return notify.error(error);
     reload();
   };
 
