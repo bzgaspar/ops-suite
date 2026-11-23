@@ -1,0 +1,30 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html { @apply antialiased; }
+  body { @apply bg-slate-50 text-slate-900; }
+  ::-webkit-scrollbar { @apply w-2 h-2; }
+  ::-webkit-scrollbar-track { @apply bg-slate-100 rounded-full; }
+  ::-webkit-scrollbar-thumb { @apply bg-slate-300 rounded-full hover:bg-slate-400; }
+  input[type='number']::-webkit-inner-spin-button { -webkit-appearance: none; }
+}
+
+/* Printing
+   - Default: only <Printable> content (portaled to <body> as .print-root) is printed — receipts, payslips, notices.
+   - printPage(): prints the current page itself (reports), without the sidebar. */
+.print-root { display: none; }
+@media print {
+  @page { margin: 10mm; }
+  body:not(.print-main) > *:not(.print-root) { display: none !important; }
+  body:not(.print-main) > .print-root { display: block !important; }
+  body.print-main > .print-root,
+  body.print-main aside,
+  body.print-main header,
+  body.print-main .print-hide { display: none !important; }
+  body.print-main .h-screen { height: auto !important; overflow: visible !important; }
+  body.print-main main { overflow: visible !important; padding: 0 !important; }
+  .page-break { break-after: page; }
+  .avoid-break { break-inside: avoid; }
+}
